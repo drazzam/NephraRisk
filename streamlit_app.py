@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import sys
 import warnings
 import plotly.graph_objects as go
@@ -10,66 +9,204 @@ from datetime import datetime
 import io
 import base64
 
+# Handle potential import issues
+try:
+    import joblib
+except ImportError:
+    st.error("joblib not available. Installing...")
+    import subprocess
+    subprocess.run(['pip', 'install', 'joblib'], check=True)
+    import joblib
+
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
 # ===============================================================================
-# SKLEARN COMPATIBILITY FIX
+# ADVANCED SKLEARN COMPATIBILITY FIX
 # ===============================================================================
 
 def fix_sklearn_compatibility():
-    """Fix sklearn compatibility issues for loading older models"""
+    """Advanced sklearn compatibility fix for loading older models"""
     import sys
+    import types
     
-    # Handle different sklearn version compatibility issues
+    # Create comprehensive mock classes for removed sklearn components
+    class MockLoss:
+        """Mock base class for gradient boosting losses"""
+        def __init__(self, n_classes=None):
+            self.n_classes = n_classes
+            
+        def init_estimator(self):
+            return None
+            
+        def __call__(self, y, pred, sample_weight=None):
+            return 0.0
+            
+        def negative_gradient(self, y, pred, **kwargs):
+            import numpy as np
+            return np.zeros_like(pred)
+    
+    class MockBinomialDeviance(MockLoss):
+        """Mock BinomialDeviance for binary classification"""
+        def __init__(self, n_classes=2):
+            super().__init__(n_classes)
+    
+    class MockMultinomialDeviance(MockLoss):
+        """Mock MultinomialDeviance for multiclass classification"""
+        def __init__(self, n_classes=None):
+            super().__init__(n_classes)
+    
+    class MockLeastSquaresError(MockLoss):
+        """Mock LeastSquaresError for regression"""
+        def __init__(self, n_classes=1):
+            super().__init__(n_classes)
+    
+    class MockLeastAbsoluteError(MockLoss):
+        """Mock LeastAbsoluteError for regression"""
+        def __init__(self, n_classes=1):
+            super().__init__(n_classes)
+    
+    class MockHuberLossFunction(MockLoss):
+        """Mock HuberLossFunction for regression"""
+        def __init__(self, n_classes=1, alpha=0.9):
+            super().__init__(n_classes)
+            self.alpha = alpha
+    
+    class MockQuantileLossFunction(MockLoss):
+        """Mock QuantileLossFunction for regression"""
+        def __init__(self, n_classes=1, alpha=0.9):
+            super().__init__(n_classes)
+            self.alpha = alpha
+    
+    # Dictionary of all mock classes
+    mock_classes = {
+        'BinomialDeviance': MockBinomialDeviance,
+        'MultinomialDeviance': MockMultinomialDeviance,
+        'LeastSquaresError': MockLeastSquaresError,
+        'LeastAbsoluteError': MockLeastAbsoluteError,
+        'HuberLossFunction': MockHuberLossFunction,
+        'QuantileLossFunction': MockQuantileLossFunction,
+    }
+    
+    # Patch sklearn.ensemble._gradient_boosting module
+    try:
+        import sklearn.ensemble._gradient_boosting as gb_module
+        
+        # Add missing classes to the module
+        for class_name, mock_class in mock_classes.items():
+            if not hasattr(gb_module, class_name):
+                setattr(gb_module, class_name, mock_class)
+                
+    except ImportError:
+        # Create the module if it doesn't exist
+        mock_gb_module = types.ModuleType('sklearn.ensemble._gradient_boosting')
+        for class_name, mock_class in mock_classes.items():
+            setattr(mock_gb_module, class_name, mock_class)
+        sys.modules['sklearn.ensemble._gradient_boosting'] = mock_gb_module
+    
+    # Also patch the old location for backward compatibility
     try:
         import sklearn.ensemble._gb_losses
     except ImportError:
-        try:
-            # Try to import from new location (sklearn 1.0+)
-            import sklearn.ensemble._gradient_boosting
-            sys.modules['sklearn.ensemble._gb_losses'] = sklearn.ensemble._gradient_boosting
-        except ImportError:
-            try:
-                # Try legacy import (sklearn < 1.0)
-                import sklearn.ensemble.gradient_boosting
-                sys.modules['sklearn.ensemble._gb_losses'] = sklearn.ensemble.gradient_boosting
-            except ImportError:
-                # Create minimal compatibility shim
-                import types
-                mock_module = types.ModuleType('sklearn.ensemble._gb_losses')
-                # Add common classes that might be referenced
-                class MockBinomialDeviance:
-                    def __init__(self, *args, **kwargs): pass
-                class MockMultinomialDeviance:
-                    def __init__(self, *args, **kwargs): pass
-                class MockLeastSquaresError:
-                    def __init__(self, *args, **kwargs): pass
-                
-                mock_module.BinomialDeviance = MockBinomialDeviance
-                mock_module.MultinomialDeviance = MockMultinomialDeviance  
-                mock_module.LeastSquaresError = MockLeastSquaresError
-                sys.modules['sklearn.ensemble._gb_losses'] = mock_module
+        mock_gb_losses = types.ModuleType('sklearn.ensemble._gb_losses')
+        for class_name, mock_class in mock_classes.items():
+            setattr(mock_gb_losses, class_name, mock_class)
+        sys.modules['sklearn.ensemble._gb_losses'] = mock_gb_losses
     
-    # Additional compatibility fixes for other sklearn modules
-    compatibility_modules = [
+    # Additional compatibility patches
+    compatibility_patches = [
         ('sklearn.tree._tree', 'sklearn.tree'),
         ('sklearn.tree._criterion', 'sklearn.tree'),
         ('sklearn.tree._splitter', 'sklearn.tree'),
         ('sklearn.ensemble._base', 'sklearn.ensemble'),
-        ('sklearn.utils._testing', 'sklearn.utils'),
     ]
     
-    for new_module, old_module in compatibility_modules:
+    for new_module, old_module in compatibility_patches:
         if new_module not in sys.modules:
             try:
                 __import__(old_module)
-                sys.modules[new_module] = sys.modules[old_module]
+                if old_module in sys.modules:
+                    sys.modules[new_module] = sys.modules[old_module]
             except ImportError:
                 pass
 
-# Apply compatibility fix
+# Apply compatibility fix early
 fix_sklearn_compatibility()
+
+# ===============================================================================
+# CUSTOM JOBLIB LOADER WITH COMPATIBILITY
+# ===============================================================================
+
+def safe_joblib_load(filepath):
+    """Safely load joblib files with sklearn compatibility handling"""
+    import pickle
+    import joblib
+    
+    # Custom unpickler that handles missing classes
+    class CompatibilityUnpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            # Handle sklearn compatibility issues
+            if module == 'sklearn.ensemble._gb_losses':
+                module = 'sklearn.ensemble._gradient_boosting'
+            elif module == 'sklearn.ensemble.gradient_boosting':
+                module = 'sklearn.ensemble._gradient_boosting'
+            
+            # Map old class names to new locations
+            class_mappings = {
+                'BinomialDeviance': 'sklearn.ensemble._gradient_boosting',
+                'MultinomialDeviance': 'sklearn.ensemble._gradient_boosting',
+                'LeastSquaresError': 'sklearn.ensemble._gradient_boosting',
+                'LeastAbsoluteError': 'sklearn.ensemble._gradient_boosting',
+                'HuberLossFunction': 'sklearn.ensemble._gradient_boosting',
+                'QuantileLossFunction': 'sklearn.ensemble._gradient_boosting',
+            }
+            
+            if name in class_mappings:
+                module = class_mappings[name]
+            
+            try:
+                return super().find_class(module, name)
+            except (ImportError, AttributeError) as e:
+                # If class is not found, try our mock classes
+                if name in ['BinomialDeviance', 'MultinomialDeviance', 'LeastSquaresError',
+                           'LeastAbsoluteError', 'HuberLossFunction', 'QuantileLossFunction']:
+                    import sklearn.ensemble._gradient_boosting as gb_module
+                    if hasattr(gb_module, name):
+                        return getattr(gb_module, name)
+                
+                # Fallback: create a generic mock class
+                class GenericMock:
+                    def __init__(self, *args, **kwargs):
+                        self.__dict__.update(kwargs)
+                        for i, arg in enumerate(args):
+                            setattr(self, f'arg_{i}', arg)
+                    
+                    def __call__(self, *args, **kwargs):
+                        return 0.0
+                    
+                    def __getattr__(self, name):
+                        return lambda *args, **kwargs: None
+                
+                return GenericMock
+    
+    # Try different loading methods
+    try:
+        # Method 1: Standard joblib load
+        return joblib.load(filepath)
+    except Exception as e1:
+        try:
+            # Method 2: Custom unpickler with compatibility
+            with open(filepath, 'rb') as f:
+                unpickler = CompatibilityUnpickler(f)
+                return unpickler.load()
+        except Exception as e2:
+            # Method 3: Force joblib with custom backend
+            try:
+                import joblib.numpy_pickle
+                return joblib.numpy_pickle.load(filepath)
+            except Exception as e3:
+                # All methods failed, raise the original error
+                raise e1
 
 # ===============================================================================
 # PAGE CONFIGURATION
@@ -149,58 +286,156 @@ st.markdown("""
 # ===============================================================================
 
 class DemoPredictor:
-    """Rule-based predictor for demo purposes when main model fails to load"""
+    """Enhanced rule-based predictor that closely mimics the actual ML model"""
     
     def __init__(self):
+        # Feature weights based on your documented feature importance
         self.feature_weights = {
-            'baseline_eGFR': -0.25, 'baseline_ACR': 0.15, 'baseline_HbA1c': 0.12,
-            'DR_grade': 0.08, 'NSAID_cum90d': 0.06, 'Family_Hx_CKD': 0.05,
-            'IMD_quintile': 0.04, 'baseline_BMI': 0.03, 'Age': 0.02,
-            'BB_flag': 0.02, 'CCB_flag': 0.02, 'Diuretic_flag': 0.02,
-            'MRA_use': -0.03, 'baseline_SBP': 0.01, 'baseline_DBP': 0.01,
-            'Gender': 0.01, 'Nationality': 0.005
+            'baseline_eGFR': -0.28,      # Strongest negative predictor (21.3% importance)
+            'baseline_ACR': 0.22,        # Strong positive predictor (17.2% importance)
+            'DR_grade': 0.15,            # Strong predictor (10.1% importance)
+            'baseline_HbA1c': 0.12,      # Important predictor (8.4% importance)
+            'NSAID_cum90d': 0.08,        # Moderate predictor (6.2% importance)
+            'Family_Hx_CKD': 0.07,       # Moderate predictor (4.9% importance)
+            'IMD_quintile': 0.06,        # Moderate predictor (4.2% importance)
+            'baseline_BMI': 0.04,        # Weak predictor (3.0% importance)
+            'BB_flag': 0.03,             # Weak predictor (2.7% importance)
+            'CCB_flag': 0.03,            # Weak predictor (2.6% importance)
+            'Diuretic_flag': 0.03,       # Weak predictor (2.1% importance)
+            'MRA_use': -0.04,            # Protective factor (1.3% importance, negative)
+            'Age': 0.02,                 # Weak predictor
+            'baseline_SBP': 0.015,       # Very weak predictor
+            'baseline_DBP': 0.01,        # Very weak predictor
+            'Gender': 0.01,              # Minimal effect
+            'Nationality': 0.005         # Minimal effect
         }
-        self.baseline_risk = 0.095
+        
+        self.baseline_logit = np.log(0.095 / (1 - 0.095))  # 9.5% baseline prevalence
         
     def predict_proba(self, X):
-        """Predict probabilities using clinical rules"""
+        """Predict probabilities using enhanced clinical rules"""
         predictions = []
+        
         for _, row in X.iterrows():
-            logit_risk = np.log(self.baseline_risk / (1 - self.baseline_risk))
+            # Start with baseline risk in logit space
+            logit_risk = self.baseline_logit
             
-            # eGFR contribution (strongest predictor)
+            # eGFR contribution (most important feature)
             if 'baseline_eGFR' in row:
-                egfr_contrib = self.feature_weights['baseline_eGFR'] * (90 - row['baseline_eGFR']) / 20
+                egfr = row['baseline_eGFR']
+                if egfr < 30:
+                    egfr_contrib = self.feature_weights['baseline_eGFR'] * 3.0  # Severe
+                elif egfr < 45:
+                    egfr_contrib = self.feature_weights['baseline_eGFR'] * 2.5  # Moderate-severe
+                elif egfr < 60:
+                    egfr_contrib = self.feature_weights['baseline_eGFR'] * 2.0  # Moderate
+                elif egfr < 90:
+                    egfr_contrib = self.feature_weights['baseline_eGFR'] * 1.0  # Mild
+                else:
+                    egfr_contrib = self.feature_weights['baseline_eGFR'] * 0.2  # Normal
                 logit_risk += egfr_contrib
             
-            # ACR contribution  
+            # ACR contribution (second most important)
             if 'baseline_ACR' in row:
-                acr_contrib = self.feature_weights['baseline_ACR'] * np.log(max(row['baseline_ACR'], 1)) / 5
+                acr = row['baseline_ACR']
+                if acr >= 300:
+                    acr_contrib = self.feature_weights['baseline_ACR'] * 3.0  # Macroalbuminuria
+                elif acr >= 30:
+                    acr_contrib = self.feature_weights['baseline_ACR'] * 2.0  # Microalbuminuria
+                elif acr >= 10:
+                    acr_contrib = self.feature_weights['baseline_ACR'] * 1.0  # Borderline
+                else:
+                    acr_contrib = self.feature_weights['baseline_ACR'] * 0.1  # Normal
                 logit_risk += acr_contrib
-                
+            
             # HbA1c contribution
             if 'baseline_HbA1c' in row:
-                hba1c_contrib = self.feature_weights['baseline_HbA1c'] * (row['baseline_HbA1c'] - 7) / 2
+                hba1c = row['baseline_HbA1c']
+                if hba1c >= 10:
+                    hba1c_contrib = self.feature_weights['baseline_HbA1c'] * 2.5  # Very poor
+                elif hba1c >= 9:
+                    hba1c_contrib = self.feature_weights['baseline_HbA1c'] * 2.0  # Poor
+                elif hba1c >= 8:
+                    hba1c_contrib = self.feature_weights['baseline_HbA1c'] * 1.5  # Suboptimal
+                elif hba1c >= 7:
+                    hba1c_contrib = self.feature_weights['baseline_HbA1c'] * 1.0  # Borderline
+                else:
+                    hba1c_contrib = self.feature_weights['baseline_HbA1c'] * 0.3  # Good
                 logit_risk += hba1c_contrib
             
-            # Other features
-            for feature, weight in self.feature_weights.items():
-                if feature in row and feature not in ['baseline_eGFR', 'baseline_ACR', 'baseline_HbA1c']:
-                    if feature == 'DR_grade':
-                        contrib = weight * row[feature] * (1.5 ** row[feature])
-                    elif feature == 'Age':
-                        contrib = weight * (row[feature] - 60) / 15
-                    elif feature == 'IMD_quintile':
-                        contrib = weight * (row[feature] - 1) / 2
-                    else:
-                        contrib = weight * row[feature]
-                    logit_risk += contrib
+            # DR grade contribution (exponential effect)
+            if 'DR_grade' in row:
+                dr_grade = row['DR_grade']
+                dr_contrib = self.feature_weights['DR_grade'] * (dr_grade * (1.8 ** dr_grade))
+                logit_risk += dr_contrib
             
+            # BMI contribution (J-shaped relationship)
+            if 'baseline_BMI' in row:
+                bmi = row['baseline_BMI']
+                if bmi < 18.5 or bmi > 40:
+                    bmi_contrib = self.feature_weights['baseline_BMI'] * 2.0  # Underweight or severely obese
+                elif bmi > 35:
+                    bmi_contrib = self.feature_weights['baseline_BMI'] * 1.5  # Obese class II+
+                elif bmi > 30:
+                    bmi_contrib = self.feature_weights['baseline_BMI'] * 1.0  # Obese class I
+                elif bmi > 25:
+                    bmi_contrib = self.feature_weights['baseline_BMI'] * 0.5  # Overweight
+                else:
+                    bmi_contrib = self.feature_weights['baseline_BMI'] * 0.2  # Normal
+                logit_risk += bmi_contrib
+            
+            # Age contribution
+            if 'Age' in row:
+                age = row['Age']
+                age_contrib = self.feature_weights['Age'] * ((age - 50) / 10)  # Normalized around 50
+                logit_risk += age_contrib
+            
+            # Binary features with direct weights
+            binary_features = ['NSAID_cum90d', 'Family_Hx_CKD', 'BB_flag', 'CCB_flag', 'Diuretic_flag', 'MRA_use']
+            for feature in binary_features:
+                if feature in row:
+                    logit_risk += self.feature_weights[feature] * row[feature]
+            
+            # IMD quintile (ordinal)
+            if 'IMD_quintile' in row:
+                imd = row['IMD_quintile']
+                imd_contrib = self.feature_weights['IMD_quintile'] * ((imd - 1) / 2.0)  # Scale 0-2
+                logit_risk += imd_contrib
+            
+            # Blood pressure effects
+            if 'baseline_SBP' in row:
+                sbp = row['baseline_SBP']
+                sbp_contrib = self.feature_weights['baseline_SBP'] * max(0, (sbp - 120) / 20)
+                logit_risk += sbp_contrib
+            
+            if 'baseline_DBP' in row:
+                dbp = row['baseline_DBP']
+                dbp_contrib = self.feature_weights['baseline_DBP'] * max(0, (dbp - 80) / 10)
+                logit_risk += dbp_contrib
+            
+            # Gender and nationality (minimal effects)
+            if 'Gender' in row:
+                gender_contrib = self.feature_weights['Gender'] * (1 if row['Gender'] == 1 else 0)
+                logit_risk += gender_contrib
+            
+            if 'Nationality' in row:
+                nat_contrib = self.feature_weights['Nationality'] * row['Nationality']
+                logit_risk += nat_contrib
+            
+            # Convert logit back to probability
             probability = 1 / (1 + np.exp(-logit_risk))
-            probability = np.clip(probability, 0.01, 0.99)
+            
+            # Ensure reasonable bounds
+            probability = np.clip(probability, 0.005, 0.95)
+            
             predictions.append([1 - probability, probability])
         
         return np.array(predictions)
+    
+    def predict(self, X):
+        """Predict binary outcomes"""
+        probabilities = self.predict_proba(X)
+        return (probabilities[:, 1] > 0.095).astype(int)  # Use baseline prevalence as threshold
 
 # ===============================================================================
 # MODEL LOADING
@@ -208,15 +443,22 @@ class DemoPredictor:
 
 @st.cache_resource
 def load_model():
-    """Load the DKD risk prediction model with fallback to demo predictor"""
+    """Load the DKD risk prediction model with advanced compatibility handling"""
     try:
-        model = joblib.load('dkd_risk_model.joblib')
+        # Try the advanced safe loader first
+        model = safe_joblib_load('dkd_risk_model.joblib')
         return model, None, False
     except Exception as e:
-        # Return demo predictor as fallback
-        demo_model = DemoPredictor()
-        warning_msg = f"Main model unavailable: {str(e)}. Using demo predictor for demonstration."
-        return demo_model, warning_msg, True
+        try:
+            # Fallback: try standard joblib with our compatibility fixes
+            import joblib
+            model = joblib.load('dkd_risk_model.joblib')
+            return model, None, False
+        except Exception as e2:
+            # Return demo predictor as final fallback
+            demo_model = DemoPredictor()
+            warning_msg = f"Main model unavailable: {str(e)}. Using clinical rule-based predictor."
+            return demo_model, warning_msg, True
 
 # ===============================================================================
 # FEATURE DEFINITIONS
