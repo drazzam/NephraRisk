@@ -220,7 +220,6 @@ class DemoPredictor:
             'baseline_SBP': 0.015,       # Very weak predictor
             'baseline_DBP': 0.01,        # Very weak predictor
             'Gender': 0.01,              # Minimal effect
-            'Nationality': 0.005         # Minimal effect
         }
         
         self.baseline_logit = np.log(0.095 / (1 - 0.095))  # 9.5% baseline prevalence
@@ -326,14 +325,10 @@ class DemoPredictor:
                 dbp_contrib = self.feature_weights['baseline_DBP'] * max(0, (dbp - 80) / 10)
                 logit_risk += dbp_contrib
             
-            # Gender and nationality (minimal effects)
+            # Gender (minimal effects)
             if 'Gender' in row:
                 gender_contrib = self.feature_weights['Gender'] * (1 if row['Gender'] == 1 else 0)
                 logit_risk += gender_contrib
-            
-            if 'Nationality' in row:
-                nat_contrib = self.feature_weights['Nationality'] * row['Nationality']
-                logit_risk += nat_contrib
             
             # Convert logit back to probability
             probability = 1 / (1 + np.exp(-logit_risk))
@@ -525,9 +520,6 @@ def create_input_dataframe(user_inputs):
         if feature == 'Gender':
             # Convert gender to numeric if needed (depends on model training)
             input_data[feature] = 1 if value == 'Male' else 0
-        elif feature == 'Nationality':
-            # Convert nationality to numeric if needed
-            input_data[feature] = 1 if value == 'Saudi' else 0
         else:
             input_data[feature] = value
     
@@ -663,7 +655,6 @@ PATIENT DEMOGRAPHICS & CLINICAL PARAMETERS:
 Demographics:
 • Age: {user_inputs['Age']} years
 • Sex: {user_inputs['Gender']}
-• Nationality: {user_inputs['Nationality']}
 • Socioeconomic Status: Quintile {user_inputs['IMD_quintile']} (1=least, 5=most deprived)
 
 Anthropometric & Vital Signs:
@@ -818,7 +809,7 @@ def main():
     
     # Demographics section
     st.sidebar.subheader("👤 Demographics")
-    for feature in ['Age', 'Gender', 'Nationality']:
+    for feature in ['Age', 'Gender']:
         feature_def = FEATURE_DEFINITIONS[feature]
         
         if feature_def['type'] == 'number':
