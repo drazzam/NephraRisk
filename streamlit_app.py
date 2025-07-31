@@ -639,13 +639,8 @@ def generate_comprehensive_report(user_inputs, risk_percentage, risk_category, i
     """Generate a comprehensive clinical report"""
     
     report = f"""
-╔═══════════════════════════════════════════════════════════════════╗
-║                    DKD RISK ASSESSMENT REPORT                    ║
-║                   Clinical Decision Support Tool                  ║
-╚═══════════════════════════════════════════════════════════════════╝
 
 REPORT GENERATED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-ASSESSMENT TYPE: 3-Year Diabetic Kidney Disease Risk Prediction
 
 ═══════════════════════════════════════════════════════════════════════
 
@@ -717,7 +712,7 @@ DATA INTERPRETATION:
 RECOMMENDATIONS:
 ─────────────────────────────────────────────────────────────────
 
-Immediate Clinical Actions:
+Recommended Actions:
 """
     
     # Add immediate actions based on values
@@ -760,18 +755,18 @@ Monitoring Schedule Based on Risk Level:
     report += f"""
 ═══════════════════════════════════════════════════════════════════════
 
-CLINICAL DISCLAIMER:
+DISCLAIMER:
 ─────────────────────────────────────────────────────────────────
 
 This assessment is intended for clinical decision support only and should
-not replace comprehensive clinical evaluation and professional judgment.
+not replace specialized physician evaluation and professional healthcare judgment.
 
 • Results should be interpreted by qualified healthcare professionals
-• Clinical decisions should consider all available patient information
+• Proper decisions should consider all available patient information
 • Regular monitoring and reassessment are recommended
-• Consult specialists as clinically indicated
+• Consult specialists as indicated
 
-For questions regarding this assessment or clinical management, please
+For questions regarding this assessment or management decisions, please
 consult with the patient's healthcare team or nephrology specialists.
 
 ═══════════════════════════════════════════════════════════════════════
@@ -808,7 +803,7 @@ def main():
     user_inputs = {}
     
     # Demographics section
-    st.sidebar.subheader("👤 Demographics")
+    st.sidebar.subheader("Demographics")
     for feature in ['Age', 'Gender']:
         feature_def = FEATURE_DEFINITIONS[feature]
         
