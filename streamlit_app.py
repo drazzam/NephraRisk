@@ -1010,11 +1010,11 @@ def main():
         
         # Clinical recommendations based on risk level
         if risk_category == "High":
-            interpretation_text.append("• **Clinical Action**: Consider nephrology referral, intensify DKD prevention strategies")
+            interpretation_text.append("• **Recommendations**: Consider nephrology referral, intensify DKD prevention strategies")
         elif risk_category == "Moderate":
-            interpretation_text.append("• **Clinical Action**: Enhanced monitoring, lifestyle interventions, optimize medical therapy")
+            interpretation_text.append("• **Recommendations**: Enhanced monitoring, lifestyle interventions, optimize medical therapy")
         else:
-            interpretation_text.append("• **Clinical Action**: Continue current management, routine monitoring appropriate")
+            interpretation_text.append("• **Recommendations**: Continue current management, routine monitoring appropriate")
         
         # Display interpretations
         for text in interpretation_text:
