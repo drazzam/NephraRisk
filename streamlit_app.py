@@ -126,8 +126,7 @@ def safe_joblib_load(filepath):
 # ===============================================================================
 
 st.set_page_config(
-    page_title="DKD Risk Prediction Platform",
-    page_icon="🩺",
+    page_title="PSMMC NephraRisk",
     layout="wide",
     initial_sidebar_state="expanded"
 )
