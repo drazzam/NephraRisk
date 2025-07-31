@@ -1,13 +1,7 @@
-# Alternative requirements for compatibility issues
-streamlit>=1.28.0
-pandas>=1.5.0,<2.1.0
-numpy>=1.21.0,<1.25.0
-scikit-learn>=1.0.0,<1.4.0
-joblib>=1.1.0,<1.4.0
-plotly>=5.0.0
-lightgbm>=3.0.0
-
-# Additional packages for better compatibility
-typing-extensions>=4.0.0
-importlib-metadata>=4.0.0
-
+streamlit==1.47.1
+pandas==2.3.1
+numpy==1.26.4
+scikit-learn==1.7.1
+joblib==1.5.1
+plotly==6.2.0
+lightgbm==4.6.0
