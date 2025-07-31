@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
 import sys
 import warnings
 import plotly.graph_objects as go
@@ -9,176 +10,41 @@ from datetime import datetime
 import io
 import base64
 
-# Handle potential import issues
-try:
-    import joblib
-except ImportError:
-    st.error("joblib not available. Installing...")
-    import subprocess
-    subprocess.run(['pip', 'install', 'joblib'], check=True)
-    import joblib
-
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
 # ===============================================================================
-# ADVANCED SKLEARN COMPATIBILITY FIX
+# MODERN SKLEARN COMPATIBILITY (SIMPLIFIED)
 # ===============================================================================
 
-def fix_sklearn_compatibility():
-    """Advanced sklearn compatibility fix for loading older models"""
+def setup_compatibility():
+    """Basic compatibility setup for modern sklearn versions"""
     import sys
     import types
-    import numpy as np
     
-    # Create comprehensive mock classes for removed sklearn components
-    class MockLoss:
-        """Mock base class for gradient boosting losses"""
-        def __init__(self, n_classes=None):
-            self.n_classes = n_classes
-            
-        def init_estimator(self):
-            return None
-            
-        def __call__(self, y, pred, sample_weight=None):
-            return 0.0
-            
-        def negative_gradient(self, y, pred, **kwargs):
-            return np.zeros_like(pred)
-    
-    class MockBinomialDeviance(MockLoss):
-        def __init__(self, n_classes=2):
-            super().__init__(n_classes)
-    
-    class MockMultinomialDeviance(MockLoss):
-        def __init__(self, n_classes=None):
-            super().__init__(n_classes)
-    
-    class MockLeastSquaresError(MockLoss):
-        def __init__(self, n_classes=1):
-            super().__init__(n_classes)
-    
-    class MockLeastAbsoluteError(MockLoss):
-        def __init__(self, n_classes=1):
-            super().__init__(n_classes)
-    
-    class MockHuberLossFunction(MockLoss):
-        def __init__(self, n_classes=1, alpha=0.9):
-            super().__init__(n_classes)
-            self.alpha = alpha
-    
-    class MockQuantileLossFunction(MockLoss):
-        def __init__(self, n_classes=1, alpha=0.9):
-            super().__init__(n_classes)
-            self.alpha = alpha
-    
-    # Dictionary of all mock classes
-    mock_classes = {
-        'BinomialDeviance': MockBinomialDeviance,
-        'MultinomialDeviance': MockMultinomialDeviance,
-        'LeastSquaresError': MockLeastSquaresError,
-        'LeastAbsoluteError': MockLeastAbsoluteError,
-        'HuberLossFunction': MockHuberLossFunction,
-        'QuantileLossFunction': MockQuantileLossFunction,
-    }
-    
-    # Patch sklearn.ensemble._gradient_boosting module
+    # Only add basic loss function compatibility if needed
     try:
         import sklearn.ensemble._gradient_boosting as gb_module
-        for class_name, mock_class in mock_classes.items():
-            if not hasattr(gb_module, class_name):
-                setattr(gb_module, class_name, mock_class)
-    except ImportError:
-        mock_gb_module = types.ModuleType('sklearn.ensemble._gradient_boosting')
-        for class_name, mock_class in mock_classes.items():
-            setattr(mock_gb_module, class_name, mock_class)
-        sys.modules['sklearn.ensemble._gradient_boosting'] = mock_gb_module
-    
-    # Also patch the old location for backward compatibility
-    try:
-        import sklearn.ensemble._gb_losses
-    except ImportError:
-        mock_gb_losses = types.ModuleType('sklearn.ensemble._gb_losses')
-        for class_name, mock_class in mock_classes.items():
-            setattr(mock_gb_losses, class_name, mock_class)
-        sys.modules['sklearn.ensemble._gb_losses'] = mock_gb_losses
-
-def patch_tree_compatibility():
-    """Patch sklearn tree structure compatibility"""
-    import numpy as np
-    import sys
-    
-    try:
-        import sklearn.tree._tree as tree_module
         
-        # Store original tree node dtype
-        if hasattr(tree_module, 'NODE_DTYPE'):
-            original_dtype = tree_module.NODE_DTYPE
-            
-            # Check if the new format is expected but old format is being loaded
-            try:
-                # Try to patch the tree loading process
-                original_tree_init = None
+        # Check if loss functions exist, add minimal mocks if needed
+        loss_functions = ['BinomialDeviance', 'MultinomialDeviance', 'LeastSquaresError']
+        
+        for loss_name in loss_functions:
+            if not hasattr(gb_module, loss_name):
+                class MockLoss:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    def __call__(self, *args, **kwargs):
+                        return 0.0
                 
-                if hasattr(tree_module, 'Tree'):
-                    Tree = tree_module.Tree
-                    if hasattr(Tree, '__setstate__'):
-                        original_setstate = Tree.__setstate__
-                        
-                        def patched_setstate(self, state):
-                            """Patched setstate to handle dtype incompatibility"""
-                            try:
-                                return original_setstate(self, state)
-                            except ValueError as e:
-                                if "incompatible dtype" in str(e) and "missing_go_to_left" in str(e):
-                                    # Handle missing_go_to_left field
-                                    if 'nodes' in state:
-                                        nodes = state['nodes']
-                                        if isinstance(nodes, np.ndarray):
-                                            # Convert old format to new format
-                                            old_dtype = nodes.dtype
-                                            if 'missing_go_to_left' not in old_dtype.names:
-                                                # Create new dtype with missing_go_to_left field
-                                                new_dtype_list = []
-                                                for name in old_dtype.names:
-                                                    new_dtype_list.append((name, old_dtype.fields[name][0]))
-                                                # Add missing field
-                                                new_dtype_list.append(('missing_go_to_left', 'u1'))
-                                                
-                                                new_dtype = np.dtype(new_dtype_list)
-                                                
-                                                # Create new array with compatible dtype
-                                                new_nodes = np.zeros(nodes.shape, dtype=new_dtype)
-                                                
-                                                # Copy existing fields
-                                                for name in old_dtype.names:
-                                                    new_nodes[name] = nodes[name]
-                                                
-                                                # Set default value for missing_go_to_left
-                                                new_nodes['missing_go_to_left'] = 0
-                                                
-                                                # Update state with new nodes
-                                                new_state = state.copy()
-                                                new_state['nodes'] = new_nodes
-                                                
-                                                return original_setstate(self, new_state)
-                                
-                                # If we can't fix it, re-raise the error
-                                raise e
-                        
-                        Tree.__setstate__ = patched_setstate
-                        
-            except Exception:
-                # If patching fails, just continue
-                pass
+                setattr(gb_module, loss_name, MockLoss)
                 
     except ImportError:
-        # If tree module not available, continue
+        # Modern sklearn - no compatibility needed
         pass
 
-# Apply compatibility fixes early
-fix_sklearn_compatibility()
-patch_tree_compatibility()
+# Apply basic compatibility
+setup_compatibility()
 
 # ===============================================================================
 # CUSTOM JOBLIB LOADER WITH COMPATIBILITY
