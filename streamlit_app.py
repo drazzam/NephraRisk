@@ -1010,7 +1010,7 @@ def main():
         
         # Clinical recommendations based on risk level
         if risk_category == "High":
-            interpretation_text.append("• **Recommendations**: Consider nephrology referral, intensify DKD prevention strategies")
+            interpretation_text.append("• **Recommendations**: Consider specialized nephrology referral, intensify DKD prevention strategies")
         elif risk_category == "Moderate":
             interpretation_text.append("• **Recommendations**: Enhanced monitoring, lifestyle interventions, optimize medical therapy")
         else:
@@ -1105,7 +1105,7 @@ def main():
         **Risk Categories:**
         - **Low (<10%):** Standard monitoring
         - **Moderate (10-20%):** Enhanced monitoring, lifestyle interventions
-        - **High (>20%):** Nephrology referral, intensive management
+        - **High (>20%):** Specialized nephrology referral, intensive management
             
         
         **Key Predictors:**
