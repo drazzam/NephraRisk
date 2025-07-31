@@ -19,20 +19,54 @@ warnings.filterwarnings('ignore')
 
 def fix_sklearn_compatibility():
     """Fix sklearn compatibility issues for loading older models"""
+    import sys
+    
+    # Handle different sklearn version compatibility issues
     try:
         import sklearn.ensemble._gb_losses
     except ImportError:
         try:
+            # Try to import from new location (sklearn 1.0+)
             import sklearn.ensemble._gradient_boosting
             sys.modules['sklearn.ensemble._gb_losses'] = sklearn.ensemble._gradient_boosting
         except ImportError:
             try:
+                # Try legacy import (sklearn < 1.0)
                 import sklearn.ensemble.gradient_boosting
                 sys.modules['sklearn.ensemble._gb_losses'] = sklearn.ensemble.gradient_boosting
             except ImportError:
+                # Create minimal compatibility shim
                 import types
                 mock_module = types.ModuleType('sklearn.ensemble._gb_losses')
+                # Add common classes that might be referenced
+                class MockBinomialDeviance:
+                    def __init__(self, *args, **kwargs): pass
+                class MockMultinomialDeviance:
+                    def __init__(self, *args, **kwargs): pass
+                class MockLeastSquaresError:
+                    def __init__(self, *args, **kwargs): pass
+                
+                mock_module.BinomialDeviance = MockBinomialDeviance
+                mock_module.MultinomialDeviance = MockMultinomialDeviance  
+                mock_module.LeastSquaresError = MockLeastSquaresError
                 sys.modules['sklearn.ensemble._gb_losses'] = mock_module
+    
+    # Additional compatibility fixes for other sklearn modules
+    compatibility_modules = [
+        ('sklearn.tree._tree', 'sklearn.tree'),
+        ('sklearn.tree._criterion', 'sklearn.tree'),
+        ('sklearn.tree._splitter', 'sklearn.tree'),
+        ('sklearn.ensemble._base', 'sklearn.ensemble'),
+        ('sklearn.utils._testing', 'sklearn.utils'),
+    ]
+    
+    for new_module, old_module in compatibility_modules:
+        if new_module not in sys.modules:
+            try:
+                __import__(old_module)
+                sys.modules[new_module] = sys.modules[old_module]
+            except ImportError:
+                pass
 
 # Apply compatibility fix
 fix_sklearn_compatibility()
