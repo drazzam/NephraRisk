@@ -127,6 +127,7 @@ def safe_joblib_load(filepath):
 
 st.set_page_config(
     page_title="PSMMC NephraRisk",
+    page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
