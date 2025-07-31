@@ -1106,6 +1106,7 @@ def main():
         PSMMC NephraRisk prediction tool uses machine learning 
         to estimate the 3-year risk of developing or progressing kidney disease in 
         diabetic patients.
+        """)
     
     with col2:
         st.subheader("Reference For Risk Categories and Utilization:")
@@ -1114,6 +1115,7 @@ def main():
         - **Low (<10%):** Standard monitoring
         - **Moderate (10-20%):** Enhanced monitoring, lifestyle interventions
         - **High (>20%):** Nephrology referral, intensive management
+            
         
         **Key Predictors:**
         - eGFR and ACR (kidney function markers)
