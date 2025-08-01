@@ -191,6 +191,23 @@ st.markdown("""
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+
+    /* ────────────────────────────────────────────────
+       HIDE STREAMLIT‑CLOUD DECORATIONS REQUESTED
+       ──────────────────────────────────────────────── */
+       
+    /* Hide the GitHub “Fork” button and icon in the header */
+    header a[href*="github.com"],
+    header button[title~="Fork"] {
+        display: none !important;
+    }
+
+    /* Hide the viewer‑badge / avatar & “Hosted by Streamlit” cluster */
+    div.viewerBadge_container__r5ekS,
+    div.viewerBadge_link__qRIco,
+    div[data-testid="stUserInfo"] {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
