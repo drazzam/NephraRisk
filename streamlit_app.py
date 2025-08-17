@@ -513,17 +513,6 @@ def main():
     
     # Sidebar for quick actions
     with st.sidebar:
-        st.header("Quick Actions")
-        if st.button("📥 Load Example Patient"):
-            st.session_state.patient_data = {
-                'age': 65, 'sex_male': True, 'ethnicity': 'white',
-                'egfr': 55, 'acr_mg_g': 150, 'hba1c': 8.2,
-                'sbp': 145, 'dbp': 85, 'diabetes_duration': 12
-            }
-        
-        if st.button("🔄 Clear All Data"):
-            st.session_state.patient_data = {}
-            st.rerun()
         
         st.markdown("---")
         st.markdown("### Clinical Guidelines")
