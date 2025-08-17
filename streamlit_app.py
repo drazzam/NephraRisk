@@ -25,7 +25,7 @@ import base64
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="NephraRisk Risk Assessment Tool",
+    page_title="Nephropathy Risk Assessment Tool",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
