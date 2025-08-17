@@ -1,4 +1,42 @@
-import streamlit as st
+# Cardiovascular Section
+        with st.expander("❤️ Cardiovascular Risk", expanded=True):
+            cv_cols = st.columns([1, 1, 1, 1])
+            
+            with cv_cols[0]:
+                sbp = st.number_input("Systolic BP", 70, 250, 125, 5)
+                st.session_state.patient_data['sbp'] = sbp
+            
+            with cv_cols[1]:
+                dbp = st.number_input("Diastolic BP", 40, 150, 75, 5)
+                st.session_state.patient_data['dbp'] = dbp
+            
+            with cv_cols[2]:
+                ascvd_10yr = st.number_input("10-yr ASCVD Risk (%)", 0.0, 100.0, 7.5, 0.5,
+                    help="From ACC/AHA Risk Calculator")
+                st.session_state.patient_data['ascvd_risk'] = ascvd_10yr
+            
+            with cv_cols[3]:
+                cvd_history = st.selectbox("CVD History",
+                    ["None", "MI/Stroke", "Heart Failure", "PAD"])
+                st.session_state.patient_data['cvd_history'] = cvd_history != "None"
+        
+        # Lifestyle Factors Section
+        with st.expander("🏃 Lifestyle Factors", expanded=False):
+            lf_cols = st.columns([1, 1, 1, 1])
+            
+            with lf_cols[0]:
+                smoking_status = st.selectbox("Smoking Status",
+                    ["Never", "Former", "Current"],
+                    help="Tobacco use history")
+                st.session_state.patient_data['smoking_status'] = smoking_status.lower()
+            
+            with lf_cols[1]:
+                physical_activity = st.selectbox("Physical Activity",
+                    ["Active (>150 min/week)", "Moderate (75-150 min/week)", "Sedentary (<75 min/week)"])
+                st.session_state.patient_data['sedentary_lifestyle'] = "Sedentary" in physical_activity
+            
+            with lf_cols[2]:
+                diet_quality = st.selectbox("Diet Qualimport streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -1123,6 +1161,71 @@ def create_factors_waterfall(factors: Dict):
 
 # Main Application
 def main():
+    # Add responsive CSS
+    st.markdown("""
+    <style>
+    /* Responsive design for mobile and tablets */
+    @media (max-width: 768px) {
+        /* Adjust sidebar */
+        section[data-testid="stSidebar"] {
+            width: 100% !important;
+        }
+        
+        /* Stack columns on mobile */
+        .stColumns {
+            flex-direction: column !important;
+        }
+        
+        /* Full width for all components on mobile */
+        .stButton, .stTextInput, .stNumberInput, .stSelectbox {
+            width: 100% !important;
+        }
+        
+        /* Adjust padding and margins */
+        .main .block-container {
+            padding: 1rem !important;
+            max-width: 100% !important;
+        }
+        
+        /* Make plots responsive */
+        .js-plotly-plot {
+            width: 100% !important;
+            height: auto !important;
+        }
+        
+        /* Responsive tables */
+        .stTable {
+            overflow-x: auto !important;
+        }
+    }
+    
+    /* Tablet-specific adjustments */
+    @media (min-width: 769px) and (max-width: 1024px) {
+        .main .block-container {
+            padding: 2rem !important;
+            max-width: 95% !important;
+        }
+    }
+    
+    /* Improve form inputs on all devices */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input {
+        font-size: 16px !important; /* Prevent zoom on mobile */
+    }
+    
+    /* Make expanders more touch-friendly */
+    .streamlit-expanderHeader {
+        padding: 1rem !important;
+        font-size: 1.1rem !important;
+    }
+    
+    /* Responsive metrics */
+    [data-testid="metric-container"] {
+        padding: 0.5rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Header with compliance information
     st.title("🏥 NephraRisk Risk Assessment Tool")
     
@@ -1193,47 +1296,48 @@ def main():
         
         # Demographics Section
         with st.expander("👤 Demographics", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            # Use responsive columns - 2 columns on mobile, 4 on desktop
+            cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with cols[0]:
                 age = st.number_input("Age (years)", 18, 110, 50, help="Patient's current age")
                 st.session_state.patient_data = st.session_state.get('patient_data', {})
                 st.session_state.patient_data['age'] = age
             
-            with col2:
+            with cols[1]:
                 sex = st.selectbox("Biological Sex", ["Female", "Male"], help="Biological sex at birth")
                 st.session_state.patient_data['sex_male'] = sex == "Male"
             
-            with col3:
+            with cols[2]:
                 ethnicity = st.selectbox("Ethnicity", 
                     ["White", "Black", "Hispanic", "Asian", "Other"],
                     help="Self-reported ethnicity"
                 ).lower()
                 st.session_state.patient_data['ethnicity'] = ethnicity
             
-            with col4:
+            with cols[3]:
                 bmi = st.number_input("BMI (kg/m²)", 15.0, 70.0, 25.0, 0.1,
                     help="Body Mass Index")
                 st.session_state.patient_data['bmi'] = bmi
         
         # Diabetes Management Section
         with st.expander("🩺 Diabetes Management", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            dm_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with dm_cols[0]:
                 diabetes_duration = st.number_input("Diabetes Duration (years)", 0, 60, 5)
                 st.session_state.patient_data['diabetes_duration'] = diabetes_duration
             
-            with col2:
+            with dm_cols[1]:
                 medication_compliance = st.slider("Medication Compliance (%)", 0, 100, 85, 5,
                     help="Overall medication adherence")
                 st.session_state.patient_data['medication_compliance'] = medication_compliance
             
-            with col3:
+            with dm_cols[2]:
                 insulin_use = st.selectbox("Insulin Therapy", ["No", "Yes"])
                 st.session_state.patient_data['insulin_use'] = insulin_use == "Yes"
             
-            with col4:
+            with dm_cols[3]:
                 if insulin_use == "Yes":
                     insulin_duration = st.number_input("Insulin Duration (years)", 0, 60, 0)
                     st.session_state.patient_data['insulin_duration'] = insulin_duration
@@ -1242,21 +1346,21 @@ def main():
         
         # Kidney Function Section
         with st.expander("🔬 Kidney Function", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            kf_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with kf_cols[0]:
                 egfr = st.number_input("Current eGFR", 5.0, 150.0, 90.0, 1.0,
                     help="CKD-EPI 2021 equation (mL/min/1.73m²)")
                 st.session_state.patient_data['egfr'] = egfr
             
-            with col2:
+            with kf_cols[1]:
                 egfr_6mo = st.number_input("eGFR 6 months ago", 5.0, 150.0, 92.0, 1.0,
                     help="For calculating rate of decline")
                 # Calculate slope
                 egfr_slope = (egfr - egfr_6mo) * 2  # Annualized
                 st.session_state.patient_data['egfr_slope'] = egfr_slope
             
-            with col3:
+            with kf_cols[2]:
                 acr_input = st.number_input("UACR", 0.0, 5000.0, 15.0, 0.1)
                 acr_unit = st.selectbox("Unit", ["mg/g", "mg/mmol"])
                 
@@ -1267,7 +1371,7 @@ def main():
                 
                 st.session_state.patient_data['acr_mg_g'] = acr_mg_g
             
-            with col4:
+            with kf_cols[3]:
                 st.metric("eGFR Slope", f"{egfr_slope:.1f} mL/min/year",
                     delta="Rapid decline" if egfr_slope < -5 else "Stable")
                 
@@ -1281,49 +1385,50 @@ def main():
         
         # Glycemic Control Section
         with st.expander("🩸 Glycemic Control", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            gc_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with gc_cols[0]:
                 hba1c = st.number_input("HbA1c (%)", 4.0, 20.0, 7.0, 0.1)
                 st.session_state.patient_data['hba1c'] = hba1c
             
-            with col2:
+            with gc_cols[1]:
                 glucose_var = st.selectbox("Glucose Variability",
                     ["Low (<36%)", "Moderate (36-50%)", "High (>50%)"],
                     help="Coefficient of variation from CGM if available")
                 st.session_state.patient_data['glucose_variability'] = glucose_var
             
-            with col3:
+            with gc_cols[2]:
                 time_in_range = st.number_input("Time in Range (%)", 0, 100, 70, 5,
                     help="CGM: % time 70-180 mg/dL")
                 st.session_state.patient_data['time_in_range'] = time_in_range
             
-            with col4:
+            with gc_cols[3]:
                 hypoglycemia = st.selectbox("Hypoglycemia Events",
                     ["None", "Rare (<1/mo)", "Frequent (≥1/mo)"])
                 st.session_state.patient_data['hypoglycemia'] = hypoglycemia
         
         # Lipid Profile Section (Fixed to mg/dL only)
         with st.expander("🧪 Lipid Profile", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            # Responsive columns
+            lipid_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with lipid_cols[0]:
                 total_cholesterol = st.number_input("Total Cholesterol (mg/dL)", 100, 500, 180, 5)
                 st.session_state.patient_data['total_cholesterol'] = total_cholesterol
             
-            with col2:
+            with lipid_cols[1]:
                 ldl_cholesterol = st.number_input("LDL Cholesterol (mg/dL)", 30, 300, 100, 5)
                 st.session_state.patient_data['ldl_cholesterol'] = ldl_cholesterol
             
-            with col3:
+            with lipid_cols[2]:
                 hdl_cholesterol = st.number_input("HDL Cholesterol (mg/dL)", 20, 100, 50, 5)
                 st.session_state.patient_data['hdl_cholesterol'] = hdl_cholesterol
             
-            with col4:
+            with lipid_cols[3]:
                 triglycerides = st.number_input("Triglycerides (mg/dL)", 50, 1000, 150, 10)
                 st.session_state.patient_data['triglycerides'] = triglycerides
             
-            # Display conversion to mmol/L for reference
+            # Display conversion to mmol/L for reference with responsive layout
             st.info(f"""
             **Conversions to mmol/L (for reference):**
             • Total Cholesterol: {total_cholesterol / 38.67:.1f} mmol/L
@@ -1381,9 +1486,9 @@ def main():
         
         # Complications Section
         with st.expander("⚕️ Diabetic Complications", expanded=False):
-            col1, col2, col3 = st.columns(3)
+            comp_cols = st.columns([1, 1, 1])
             
-            with col1:
+            with comp_cols[0]:
                 retinopathy = st.selectbox("Retinopathy",
                     ["None", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "PDR"])
                 if retinopathy != "None":
@@ -1399,36 +1504,37 @@ def main():
                 else:
                     st.session_state.patient_data['retinopathy'] = False
             
-            with col2:
+            with comp_cols[1]:
                 neuropathy = st.selectbox("Neuropathy", ["No", "Yes"])
                 st.session_state.patient_data['neuropathy_dx'] = neuropathy == "Yes"
             
-            with col3:
+            with comp_cols[2]:
                 autonomic = st.selectbox("Autonomic Neuropathy", ["No", "Yes"])
                 st.session_state.patient_data['autonomic_neuropathy'] = autonomic == "Yes"
         
         # Medications Section
         with st.expander("💊 Current Medications", expanded=False):
             st.markdown("**Kidney-Protective Therapies**")
-            col1, col2, col3, col4, col5 = st.columns(5)
+            # Use responsive columns
+            med_cols = st.columns([1, 1, 1, 1, 1])
             
-            with col1:
+            with med_cols[0]:
                 sglt2i = st.selectbox("SGLT2 Inhibitor", ["No", "Yes"])
                 st.session_state.patient_data['sglt2i_use'] = sglt2i == "Yes"
             
-            with col2:
+            with med_cols[1]:
                 ace_arb = st.selectbox("ACE-I/ARB", ["No", "Yes"])
                 st.session_state.patient_data['ace_arb_use'] = ace_arb == "Yes"
             
-            with col3:
+            with med_cols[2]:
                 gip_glp1 = st.selectbox("GIP/GLP-1 RA", ["No", "Yes"])
                 st.session_state.patient_data['gip_glp1_use'] = gip_glp1 == "Yes"
             
-            with col4:
+            with med_cols[3]:
                 finerenone = st.selectbox("Finerenone", ["No", "Yes"])
                 st.session_state.patient_data['finerenone_use'] = finerenone == "Yes"
             
-            with col5:
+            with med_cols[4]:
                 statin = st.selectbox("Statin", ["No", "Yes"])
                 st.session_state.patient_data['statin_use'] = statin == "Yes"
     
@@ -1464,25 +1570,26 @@ def main():
                     )
                 }
                 
-                # Display results
-                col1, col2 = st.columns([1, 1])
+                # Display results with responsive layout
+                # Use single column on mobile, two columns on larger screens
+                result_cols = st.columns([1, 1])
                 
-                with col1:
+                with result_cols[0]:
                     # Enhanced risk gauge
                     fig_gauge = create_enhanced_risk_gauge(risk, ci, uncertainty)
                     st.plotly_chart(fig_gauge, use_container_width=True)
                     
                     # Risk metrics
                     st.markdown("### Risk Metrics")
-                    met_col1, met_col2, met_col3 = st.columns(3)
-                    with met_col1:
+                    met_cols = st.columns(3)
+                    with met_cols[0]:
                         st.metric("Point Estimate", f"{risk:.1f}%")
-                    with met_col2:
+                    with met_cols[1]:
                         st.metric("95% CI", f"{ci[0]:.1f}-{ci[1]:.1f}%")
-                    with met_col3:
+                    with met_cols[2]:
                         st.metric("Uncertainty", f"±{uncertainty:.1%}")
                 
-                with col2:
+                with result_cols[1]:
                     # Factor analysis
                     fig_factors = create_factors_waterfall(factors)
                     if fig_factors:
@@ -1490,27 +1597,28 @@ def main():
                     else:
                         st.info("No significant modifiable risk factors identified")
                 
-                # Clinical recommendations
+                # Clinical recommendations with responsive layout
                 st.markdown("### 📋 Evidence-Based Recommendations")
                 recommendations = get_clinical_recommendations(risk, factors, st.session_state.patient_data)
                 st.session_state['recommendations'] = recommendations
                 
-                rec_col1, rec_col2 = st.columns(2)
-                with rec_col1:
+                # Use responsive columns for recommendations
+                rec_cols = st.columns([1, 1])
+                with rec_cols[0]:
                     st.markdown("**Management Recommendations:**")
                     for rec in recommendations[:len(recommendations)//2]:
                         st.markdown(rec)
                 
-                with rec_col2:
+                with rec_cols[1]:
                     st.markdown("**Monitoring Schedule:**")
                     for rec in recommendations[len(recommendations)//2:]:
                         st.markdown(rec)
                 
-                # Export functionality
+                # Export functionality with responsive layout
                 st.markdown("---")
-                col1, col2, col3 = st.columns(3)
+                export_cols = st.columns([1, 1, 1])
                 
-                with col1:
+                with export_cols[0]:
                     if st.button("🔄 Calculate New Patient", use_container_width=True):
                         st.session_state.patient_data = {}
                         st.rerun()
@@ -1518,35 +1626,46 @@ def main():
                 with col2:
                     # Generate PDF Report with optional patient name
                     if 'risk_results' in st.session_state:
-                        # Optional patient name input
-                        patient_name = st.text_input("Patient Name (Optional for PDF)", 
-                                                    placeholder="Enter patient name or leave blank")
+                        # Use form to properly capture patient name
+                        with st.form(key="pdf_form"):
+                            patient_name = st.text_input("Patient Name (Optional for PDF)", 
+                                                        placeholder="Enter patient name or leave blank")
+                            generate_pdf = st.form_submit_button("📄 Generate & Download PDF Report", 
+                                                                use_container_width=True)
                         
-                        pdf_buffer = generate_pdf_report(
-                            st.session_state.patient_data,
-                            st.session_state['risk_results']['risk'],
-                            st.session_state['risk_results']['ci'],
-                            st.session_state['risk_results']['factors'],
-                            st.session_state.get('recommendations', []),
-                            st.session_state['risk_results']['ckd_stage'],
-                            patient_name if patient_name else None
-                        )
-                        
-                        st.download_button(
-                            label="📄 Download PDF Report",
-                            data=pdf_buffer,
-                            file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
+                        if generate_pdf:
+                            # Generate PDF with proper name handling
+                            patient_name_for_pdf = None
+                            if patient_name and patient_name.strip():
+                                patient_name_for_pdf = patient_name.strip()
+                            
+                            pdf_buffer = generate_pdf_report(
+                                st.session_state.patient_data,
+                                st.session_state['risk_results']['risk'],
+                                st.session_state['risk_results']['ci'],
+                                st.session_state['risk_results']['factors'],
+                                st.session_state.get('recommendations', []),
+                                st.session_state['risk_results']['ckd_stage'],
+                                patient_name_for_pdf
+                            )
+                            
+                            st.download_button(
+                                label="📥 Download PDF Report",
+                                data=pdf_buffer,
+                                file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key="pdf_download"
+                            )
                 
-                with col3:
+                with export_cols[2]:
                     # Text report (existing functionality)
-                    stage_map = {
-                        'no_ckd': "No CKD", 'stage_1_2': "CKD 1-2",
-                        'stage_3a': "CKD 3a", 'stage_3b': "CKD 3b", 'stage_4': "CKD 4"
-                    }
-                    report = f""" NephraRisk Assessment Tool Report
+                    if 'risk_results' in st.session_state:
+                        stage_map = {
+                            'no_ckd': "No CKD", 'stage_1_2': "CKD 1-2",
+                            'stage_3a': "CKD 3a", 'stage_3b': "CKD 3b", 'stage_4': "CKD 4"
+                        }
+                        report = f""" NephraRisk Assessment Tool Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 PATIENT SUMMARY:
@@ -1569,30 +1688,31 @@ METABOLIC CONTROL:
 - Triglycerides: {st.session_state.patient_data.get('triglycerides', 'N/A')} mg/dL
 
 RISK ASSESSMENT:
-- 36-Month DKD Risk: {risk:.1f}% (95% CI: {ci[0]:.1f}-{ci[1]:.1f}%)
-- Risk Category: {RiskCategory.LOW.value if risk < 5 else RiskCategory.MODERATE.value if risk < 15 else RiskCategory.HIGH.value if risk < 30 else RiskCategory.VERY_HIGH.value}
-- Model Uncertainty: ±{uncertainty:.1%}
+- 36-Month DKD Risk: {st.session_state['risk_results']['risk']:.1f}% (95% CI: {st.session_state['risk_results']['ci'][0]:.1f}-{st.session_state['risk_results']['ci'][1]:.1f}%)
+- Risk Category: {RiskCategory.LOW.value if st.session_state['risk_results']['risk'] < 5 else RiskCategory.MODERATE.value if st.session_state['risk_results']['risk'] < 15 else RiskCategory.HIGH.value if st.session_state['risk_results']['risk'] < 30 else RiskCategory.VERY_HIGH.value}
+- Model Uncertainty: ±{st.session_state['risk_results']['uncertainty']:.1%}
 
 RECOMMENDATIONS:
-{chr(10).join(recommendations)}
+{chr(10).join(st.session_state.get('recommendations', []))}
 
 This report is for clinical decision support only and should not replace clinical judgment.
-                    """
-                    
-                    st.download_button(
-                        label="📄 Download Text Report",
-                        data=report,
-                        file_name=f"dkd_risk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
+                        """
+                        
+                        st.download_button(
+                            label="📄 Download Text Report",
+                            data=report,
+                            file_name=f"dkd_risk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                            mime="text/plain",
+                            use_container_width=True
+                        )
     
     with tab3:
         st.header("Clinical Resources & Model Information")
         
-        col1, col2 = st.columns(2)
+        # Responsive columns for clinical resources
+        resource_cols = st.columns([1, 1])
         
-        with col1:
+        with resource_cols[0]:
             st.markdown("""
             ### Model Performance
             - **C-statistic:** 0.852 (95% CI: 0.841-0.863)
@@ -1600,7 +1720,7 @@ This report is for clinical decision support only and should not replace clinica
             - **Brier Score:** 0.085
             """)
         
-        with col2:
+        with resource_cols[1]:
             st.markdown("""
             ### Clinical Cutpoints
             - **eGFR <60:** Referral to nephrology
