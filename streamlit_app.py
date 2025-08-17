@@ -1175,8 +1175,7 @@ def main():
                         st.rerun()
                 
                 with col2:
-                    report = f"""
-NephraRisk Assessment Tool Report
+                    report = f""" NephraRisk Assessment Tool Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 PATIENT SUMMARY:
