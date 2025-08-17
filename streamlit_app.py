@@ -272,7 +272,11 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(Paragraph("PATIENT INFORMATION", heading_style))
     
     sex_display = "Male" if patient_data.get('sex_male', False) else "Female"
-    patient_name_display = patient_name if patient_name else "N/A"
+    # Handle patient name safely
+    if patient_name and patient_name.strip():
+        patient_name_display = str(patient_name).strip()
+    else:
+        patient_name_display = "N/A"
     
     patient_info_data = [
         ['', 'NAME', 'SEX', 'AGE'],
@@ -291,37 +295,48 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(patient_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Risk Assessment Section with better spacing
+    # Risk Assessment Section with proper centering and spacing
     story.append(Paragraph("RISK OF PROGRESSIVE DECLINE IN KIDNEY FUNCTION", heading_style))
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Spacer(1, 0.4*inch))
     
-    # Risk visualization with fixed spacing
+    # Risk visualization with properly centered and spaced components
     risk_color = '#4CAF50' if risk < 5 else '#FFC107' if risk < 15 else '#FF9800' if risk < 30 else '#F44336'
     risk_category = "Low" if risk < 5 else "Moderate" if risk < 15 else "High" if risk < 30 else "Very High"
     
-    # Create a table to properly align risk components
-    risk_display_data = [
-        [f'<font size="48" color="{risk_color}"><b>{risk:.0f}</b></font>'],
-        ['<font size="14">36-Month Risk Score</font>'],
-        [f'<font size="12" color="#666666">95% CI: {ci[0]:.1f}-{ci[1]:.1f}%</font>']
-    ]
+    # Create properly centered risk score components
+    risk_score_style = ParagraphStyle(
+        'RiskScore',
+        parent=styles['Normal'],
+        fontSize=48,
+        textColor=HexColor(risk_color),
+        alignment=TA_CENTER,
+        leading=50
+    )
     
-    risk_table = Table(risk_display_data, colWidths=[7*inch])
-    risk_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-    ]))
+    risk_label_style = ParagraphStyle(
+        'RiskLabel',
+        parent=styles['Normal'],
+        fontSize=14,
+        alignment=TA_CENTER,
+        leading=16
+    )
     
-    for row in risk_display_data:
-        para = Paragraph(row[0], styles['Normal'])
-        story.append(para)
-        story.append(Spacer(1, 0.1*inch))
+    risk_ci_style = ParagraphStyle(
+        'RiskCI',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=HexColor('#666666'),
+        alignment=TA_CENTER,
+        leading=14
+    )
     
-    story.append(Spacer(1, 0.2*inch))
+    # Add risk components with proper spacing
+    story.append(Paragraph(f"<b>{risk:.0f}</b>", risk_score_style))
+    story.append(Spacer(1, 0.15*inch))
+    story.append(Paragraph("36-Month Risk Score", risk_label_style))
+    story.append(Spacer(1, 0.1*inch))
+    story.append(Paragraph(f"95% CI: {ci[0]:.1f}-{ci[1]:.1f}%", risk_ci_style))
+    story.append(Spacer(1, 0.3*inch))
     
     # Risk interpretation
     risk_interpretation_style = ParagraphStyle(
