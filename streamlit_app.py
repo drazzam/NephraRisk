@@ -17,44 +17,44 @@ st.set_page_config(
 # Enhanced Model with Additional Clinical Variables
 class DKDModelCoefficients:
     def __init__(self):
-        # Base risk parameters (properly calibrated for truly low-risk patients)
+        # Base risk parameters (properly calibrated based on clinical literature)
         self.base_monthly_risk_incident = 0.0008  # 0.08% per month baseline for healthy
-        self.base_monthly_risk_progression = 0.005  # 0.5% per month baseline for existing DKD
+        self.base_monthly_risk_progression = 0.0015  # 0.15% per month baseline for existing CKD (well-controlled)
         
-        # Risk multipliers (properly scaled with new variables)
+        # Risk multipliers (recalibrated for realistic progression modeling)
         self.risk_factors = {
             # Demographics
-            'age_multiplier_per_10_years': 1.15,  # 15% increase per 10 years above 50
-            'male_sex_multiplier': 1.20,  # 20% higher risk for males
+            'age_multiplier_per_10_years': 1.12,  # 12% increase per 10 years above 50
+            'male_sex_multiplier': 1.15,  # 15% higher risk for males
             
             # Diabetes characteristics
-            'diabetes_duration_multiplier_per_5_years': 1.12,  # 12% increase per 5 years above 10
-            'medication_compliance_poor_multiplier': 1.35,  # 35% increase for poor compliance (<80%)
+            'diabetes_duration_multiplier_per_5_years': 1.08,  # 8% increase per 5 years above 10
+            'medication_compliance_poor_multiplier': 1.25,  # 25% increase for poor compliance (<80%)
             
-            # Core clinical (major impact)
-            'egfr_multiplier_per_10ml_drop': 1.25,  # 25% increase per 10 mL drop below 90
-            'acr_multiplier_doubling': 1.40,  # 40% increase per doubling of ACR above 10
-            'hba1c_multiplier_per_percent': 1.12,  # 12% increase per 1% above 7%
+            # Core clinical (major impact but realistic)
+            'egfr_multiplier_per_10ml_drop': 1.18,  # 18% increase per 10 mL drop below 90
+            'acr_multiplier_doubling': 1.25,  # 25% increase per doubling of ACR above 10
+            'hba1c_multiplier_per_percent': 1.10,  # 10% increase per 1% above 7%
             
             # Blood pressure
-            'sbp_multiplier_per_10mmhg': 1.05,  # 5% increase per 10 mmHg above 120
-            'severe_hypertension_bonus': 1.30,  # Additional 30% if SBP >160
+            'sbp_multiplier_per_10mmhg': 1.04,  # 4% increase per 10 mmHg above 120
+            'severe_hypertension_bonus': 1.20,  # Additional 20% if SBP >160
             
             # Cardiovascular risk
-            'ascvd_risk_multiplier_per_10_percent': 1.08,  # 8% increase per 10% ASCVD risk above 7.5%
-            'high_ascvd_risk_bonus': 1.25,  # Additional 25% if ASCVD risk >20%
+            'ascvd_risk_multiplier_per_10_percent': 1.06,  # 6% increase per 10% ASCVD risk above 7.5%
+            'high_ascvd_risk_bonus': 1.15,  # Additional 15% if ASCVD risk >20%
             
             # Lipid profile (evidence-based)
-            'total_cholesterol_multiplier_per_50mg': 1.06,  # 6% increase per 50mg/dl above 200
-            'ldl_multiplier_per_30mg': 1.08,  # 8% increase per 30mg/dl above 100
-            'hdl_protection_per_10mg': 0.94,  # 6% protection per 10mg/dl above 40
-            'triglycerides_multiplier_per_100mg': 1.10,  # 10% increase per 100mg/dl above 150
+            'total_cholesterol_multiplier_per_50mg': 1.04,  # 4% increase per 50mg/dl above 200
+            'ldl_multiplier_per_30mg': 1.05,  # 5% increase per 30mg/dl above 100
+            'hdl_protection_per_10mg': 0.96,  # 4% protection per 10mg/dl above 40
+            'triglycerides_multiplier_per_100mg': 1.06,  # 6% increase per 100mg/dl above 150
             
-            # Complications (significant multipliers)
-            'retinopathy_mild_multiplier': 1.50,  # 50% increase
-            'retinopathy_severe_multiplier': 2.20,  # 120% increase (severe/PDR)
-            'neuropathy_multiplier': 1.35,  # 35% increase
-            'cardiovascular_multiplier': 1.45,  # 45% increase
+            # Complications (significant but realistic multipliers)
+            'retinopathy_mild_multiplier': 1.35,  # 35% increase
+            'retinopathy_severe_multiplier': 1.65,  # 65% increase (severe/PDR)
+            'neuropathy_multiplier': 1.25,  # 25% increase
+            'cardiovascular_multiplier': 1.30,  # 30% increase
             
             # Medications (protective - reduce risk)
             'sglt2i_protection_factor': 0.65,  # 35% risk reduction
@@ -62,10 +62,10 @@ class DKDModelCoefficients:
             'statin_protection_factor': 0.85,  # 15% risk reduction
             
             # Lifestyle/other risk factors
-            'current_smoking_multiplier': 1.40,  # 40% increase
-            'insulin_use_multiplier': 1.25,  # 25% increase (disease severity marker)
-            'family_history_multiplier': 1.30,  # 30% increase
-            'depression_multiplier': 1.15,  # 15% increase
+            'current_smoking_multiplier': 1.25,  # 25% increase
+            'insulin_use_multiplier': 1.15,  # 15% increase (disease severity marker)
+            'family_history_multiplier': 1.20,  # 20% increase
+            'depression_multiplier': 1.10,  # 10% increase
         }
 
 def convert_acr_units(acr_mg_mmol):
@@ -674,12 +674,12 @@ def main():
             if active_factors['risk']:
                 st.write("**Factors Increasing Risk:**")
                 for factor_name, factor_impact in active_factors['risk']:
-                    st.write(f"• {factor_name} (+{factor_impact:.0f}%)")
+                    st.write(f"• {factor_name}")
             
             if active_factors['protective']:
                 st.write("**Protective Factors:**")
                 for factor_name, factor_impact in active_factors['protective']:
-                    st.write(f"• {factor_name} (-{factor_impact:.0f}%)")
+                    st.write(f"• {factor_name}")
         else:
             st.write("• Patient has a low baseline risk profile with good diabetes control and normal kidney function.")
             st.write("• Continue current diabetes management and routine monitoring.")
