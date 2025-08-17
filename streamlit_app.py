@@ -164,7 +164,7 @@ def calculate_enhanced_monthly_hazard(features, coefficients, alpha, model_type)
     bmi = features.get('bmi', 25)
     linear_predictor += coefficients.core_coefficients['bmi_per_unit'] * bmi
     if bmi > 30:
-        linear_predictor += coefficients.complications_coefficients['obesity_bonus']
+        linear_predictor += coefficients.core_coefficients['obesity_bonus']  # Fixed reference
     
     # HbA1c effects (progressive with poor control)
     hba1c = features.get('hba1c', 7)
@@ -355,13 +355,23 @@ def calculate_feature_importance_simple(features, coefficients, model_type):
     if features.get('sex_male'):
         contributions['Male Sex'] = 'risk'
     
+    # BMI check
+    bmi = features.get('bmi', 25)
+    if bmi > 30:
+        contributions['Obesity (BMI >30)'] = 'risk'
+    
     hba1c = features.get('hba1c', 7)
     if hba1c > 8:
         contributions['Poor Glucose Control (HbA1c >8%)'] = 'risk'
+    elif hba1c > 9:
+        contributions['Very Poor Glucose Control (HbA1c >9%)'] = 'risk'
     
     egfr = features.get('egfr', 90)
     if egfr < 60:
-        contributions['Reduced Kidney Function (eGFR <60)'] = 'risk'
+        if egfr < 30:
+            contributions['Severely Reduced Kidney Function (eGFR <30)'] = 'risk'
+        else:
+            contributions['Reduced Kidney Function (eGFR <60)'] = 'risk'
     
     acr_mg_g = features.get('acr_mg_g', 15)
     if acr_mg_g >= 30:
@@ -406,6 +416,12 @@ def calculate_feature_importance_simple(features, coefficients, model_type):
     if features.get('statin_use'):
         contributions['Statin Therapy'] = 'protective'
     
+    if features.get('mra_use'):
+        contributions['MRA Therapy'] = 'protective'
+    
+    if features.get('glp1_use'):
+        contributions['GLP-1 Agonist'] = 'protective'
+    
     # Lifestyle factors
     smoking_status = features.get('smoking_status', 'never')
     if smoking_status == 'current':
@@ -416,6 +432,9 @@ def calculate_feature_importance_simple(features, coefficients, model_type):
     
     if features.get('depression_dx'):
         contributions['Depression'] = 'risk'
+    
+    if features.get('nsaid_chronic_use'):
+        contributions['Regular NSAID Use'] = 'risk'
     
     return contributions
 
