@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import math
 import warnings
 from typing import Dict, Tuple, List, Optional
@@ -12,7 +12,7 @@ from enum import Enum
 from io import BytesIO
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
@@ -213,7 +213,18 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     """Generate a professional PDF report similar to KidneyIntelX style"""
     
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    # Arabian Standard Time (GMT+3)
+    ast_timezone = timezone(timedelta(hours=3))
+    current_time_ast = datetime.now(ast_timezone)
+    
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=letter, 
+        topMargin=0.5*inch, 
+        bottomMargin=0.5*inch,
+        title="Nephropathy Risk Assessment Report"
+    )
     story = []
     styles = getSampleStyleSheet()
     
@@ -223,7 +234,16 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
         parent=styles['Heading1'],
         fontSize=24,
         textColor=HexColor('#1e3a5f'),
-        spaceAfter=30,
+        spaceAfter=10,
+        alignment=TA_CENTER
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubTitle',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=HexColor('#2c5282'),
+        spaceAfter=20,
         alignment=TA_CENTER
     )
     
@@ -245,17 +265,16 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     )
     
     # Header
-    story.append(Paragraph("<b>NephraRisk™</b>", title_style))
-    story.append(Paragraph("Diabetic Kidney Disease Risk Assessment Report", styles['Title']))
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Paragraph("<b>NephraRisk</b>", title_style))
+    story.append(Paragraph("Nephropathy Risk Assessment Report", subtitle_style))
+    story.append(Spacer(1, 0.2*inch))
     
-    # Report metadata
-    report_date = datetime.now().strftime('%m/%d/%Y')
-    report_time = datetime.now().strftime('%I:%M %p')
+    # Report metadata - Only date and time
+    report_date = current_time_ast.strftime('%m/%d/%Y')
+    report_time = current_time_ast.strftime('%I:%M %p')
     
     metadata_data = [
-        ['Report Date:', report_date, 'Report Time:', report_time],
-        ['Ordering Provider:', 'N/A', 'Medical Record #:', 'N/A']
+        ['Report Date:', report_date, 'Report Time:', f'{report_time} AST']
     ]
     
     metadata_table = Table(metadata_data, colWidths=[1.5*inch, 2*inch, 1.5*inch, 2*inch])
@@ -273,11 +292,11 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     
     sex_display = "Male" if patient_data.get('sex_male', False) else "Female"
     patient_info_data = [
-        ['', 'NAME', 'SEX', 'DATE OF BIRTH', 'AGE'],
-        ['', 'Patient', sex_display, 'N/A', f"{patient_data.get('age', 'N/A')} years"]
+        ['', 'NAME', 'SEX', 'AGE'],
+        ['', 'Patient', sex_display, f"{patient_data.get('age', 'N/A')} years"]
     ]
     
-    patient_table = Table(patient_info_data, colWidths=[0.5*inch, 2*inch, 1.5*inch, 2*inch, 1.5*inch])
+    patient_table = Table(patient_info_data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 2*inch])
     patient_table.setStyle(TableStyle([
         ('BACKGROUND', (1, 0), (-1, 0), HexColor('#e6f2ff')),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -289,32 +308,62 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(patient_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Risk Assessment Section
+    # Risk Assessment Section with proper spacing
     story.append(Paragraph("RISK OF PROGRESSIVE DECLINE IN KIDNEY FUNCTION", heading_style))
+    story.append(Spacer(1, 0.2*inch))
     
-    # Risk visualization (text-based representation)
+    # Risk score display with better spacing
     risk_color = '#4CAF50' if risk < 5 else '#FFC107' if risk < 15 else '#FF9800' if risk < 30 else '#F44336'
     risk_category = "Low" if risk < 5 else "Moderate" if risk < 15 else "High" if risk < 30 else "Very High"
     
-    risk_box = f"""
-    <para align="center">
-    <font size="48" color="{risk_color}"><b>{risk:.0f}</b></font><br/>
-    <font size="14">36-Month Risk Score</font><br/>
-    <font size="12" color="#666666">95% CI: {ci[0]:.1f}-{ci[1]:.1f}%</font>
-    </para>
-    """
-    story.append(Paragraph(risk_box, styles['Normal']))
-    story.append(Spacer(1, 0.2*inch))
+    # Risk score - properly separated
+    risk_score_style = ParagraphStyle(
+        'RiskScore',
+        parent=styles['Normal'],
+        fontSize=48,
+        textColor=HexColor(risk_color),
+        alignment=TA_CENTER,
+        spaceAfter=10
+    )
+    
+    risk_label_style = ParagraphStyle(
+        'RiskLabel',
+        parent=styles['Normal'],
+        fontSize=14,
+        alignment=TA_CENTER,
+        spaceAfter=6
+    )
+    
+    risk_ci_style = ParagraphStyle(
+        'RiskCI',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=HexColor('#666666'),
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+    
+    # Add risk components separately to avoid overlap
+    story.append(Paragraph(f"<b>{risk:.0f}</b>", risk_score_style))
+    story.append(Paragraph("36-Month Risk Score", risk_label_style))
+    story.append(Paragraph(f"95% CI: {ci[0]:.1f}-{ci[1]:.1f}%", risk_ci_style))
     
     # Risk interpretation
-    risk_text = f"""
-    <para align="center">
-    <font size="14"><b>Patients with a {risk_category.lower()} NephraRisk score have a 
-    {risk_category.lower()} risk of progressive decline in kidney function</b></font>
-    </para>
-    """
-    story.append(Paragraph(risk_text, styles['Normal']))
-    story.append(Spacer(1, 0.3*inch))
+    risk_interpretation_style = ParagraphStyle(
+        'RiskInterpretation',
+        parent=styles['Normal'],
+        fontSize=13,
+        alignment=TA_CENTER,
+        spaceAfter=20,
+        spaceBefore=10
+    )
+    
+    story.append(Paragraph(
+        f"<b>Patients with a {risk_category.lower()} NephraRisk score have a "
+        f"{risk_category.lower()} risk of progressive decline in kidney function</b>",
+        risk_interpretation_style
+    ))
+    story.append(Spacer(1, 0.2*inch))
     
     # Clinical Data Summary
     story.append(Paragraph("CLINICAL DATA SUMMARY", heading_style))
@@ -330,7 +379,7 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
         ['UACR', f"{patient_data.get('acr_mg_g', 'N/A'):.1f} mg/g", '<30'],
         ['HbA1c', f"{patient_data.get('hba1c', 'N/A'):.1f}%", '<7.0'],
         ['Systolic BP', f"{patient_data.get('sbp', 'N/A')} mmHg", '<130'],
-        ['LDL Cholesterol', f"{patient_data.get('ldl_cholesterol', 'N/A')} mg/dL", '<100'],
+        ['LDL Cholesterol', f"{patient_data.get('ldl_cholesterol', 'N/A'):.1f} mg/dL", '<100'],
         ['BMI', f"{patient_data.get('bmi', 'N/A'):.1f} kg/m²", '18.5-24.9'],
         ['KDIGO Stage', stage_map.get(ckd_stage, 'N/A'), 'No CKD'],
         ['Diabetes Duration', f"{patient_data.get('diabetes_duration', 'N/A')} years", 'N/A']
@@ -440,10 +489,9 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     footer_text = f"""
     <para align="center">
     <font size="8" color="#666666">
-    NephraRisk™ Risk Assessment Tool v{MODEL_VERSION}<br/>
     {REGULATORY_STATUS}<br/>
     This report is for clinical decision support only and should not replace clinical judgment.<br/>
-    Report generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+    Report generated: {current_time_ast.strftime('%B %d, %Y at %I:%M %p')} AST
     </font>
     </para>
     """
@@ -617,7 +665,7 @@ def calculate_risk_with_interactions(features: Dict, model: ClinicalValidation) 
         chol_excess = (total_chol - 200) / 40
         chol_hr = model.hazard_ratios['total_chol_per_40mg']['hr'] ** chol_excess
         log_hr += math.log(chol_hr)
-        active_factors['risk'].append((f"Total Cholesterol {total_chol} mg/dL", (chol_hr - 1) * 100))
+        active_factors['risk'].append((f"Total Cholesterol {total_chol:.0f} mg/dL", (chol_hr - 1) * 100))
         n_features += 1
     
     ldl = features.get('ldl_cholesterol', 100)
@@ -627,18 +675,18 @@ def calculate_risk_with_interactions(features: Dict, model: ClinicalValidation) 
         log_hr += math.log(ldl_hr)
         
         if ldl > 160:
-            active_factors['risk'].append((f"Very High LDL ({ldl} mg/dL)", (ldl_hr - 1) * 100))
+            active_factors['risk'].append((f"Very High LDL ({ldl:.0f} mg/dL)", (ldl_hr - 1) * 100))
         elif ldl > 130:
-            active_factors['risk'].append((f"High LDL ({ldl} mg/dL)", (ldl_hr - 1) * 100))
+            active_factors['risk'].append((f"High LDL ({ldl:.0f} mg/dL)", (ldl_hr - 1) * 100))
         else:
-            active_factors['risk'].append((f"Elevated LDL ({ldl} mg/dL)", (ldl_hr - 1) * 100))
+            active_factors['risk'].append((f"Elevated LDL ({ldl:.0f} mg/dL)", (ldl_hr - 1) * 100))
         n_features += 1
     
     hdl = features.get('hdl_cholesterol', 50)
     if hdl < 40:
         hdl_hr = model.hazard_ratios['hdl_low']['hr']
         log_hr += math.log(hdl_hr)
-        active_factors['risk'].append((f"Low HDL ({hdl} mg/dL)", (hdl_hr - 1) * 100))
+        active_factors['risk'].append((f"Low HDL ({hdl:.0f} mg/dL)", (hdl_hr - 1) * 100))
         n_features += 1
     
     triglycerides = features.get('triglycerides', 150)
@@ -648,11 +696,11 @@ def calculate_risk_with_interactions(features: Dict, model: ClinicalValidation) 
         log_hr += math.log(tg_hr)
         
         if triglycerides > 500:
-            active_factors['risk'].append((f"Very High Triglycerides ({triglycerides} mg/dL)", (tg_hr - 1) * 100))
+            active_factors['risk'].append((f"Very High Triglycerides ({triglycerides:.0f} mg/dL)", (tg_hr - 1) * 100))
         elif triglycerides > 200:
-            active_factors['risk'].append((f"High Triglycerides ({triglycerides} mg/dL)", (tg_hr - 1) * 100))
+            active_factors['risk'].append((f"High Triglycerides ({triglycerides:.0f} mg/dL)", (tg_hr - 1) * 100))
         else:
-            active_factors['risk'].append((f"Elevated Triglycerides ({triglycerides} mg/dL)", (tg_hr - 1) * 100))
+            active_factors['risk'].append((f"Elevated Triglycerides ({triglycerides:.0f} mg/dL)", (tg_hr - 1) * 100))
         n_features += 1
     
     # Blood pressure - SHOW if elevated
@@ -1525,10 +1573,10 @@ KIDNEY FUNCTION:
 
 METABOLIC CONTROL:
 - HbA1c: {st.session_state.patient_data.get('hba1c', 'N/A'):.1f}%
-- Total Cholesterol: {st.session_state.patient_data.get('total_cholesterol', 'N/A')} mg/dL
-- LDL: {st.session_state.patient_data.get('ldl_cholesterol', 'N/A')} mg/dL
-- HDL: {st.session_state.patient_data.get('hdl_cholesterol', 'N/A')} mg/dL
-- Triglycerides: {st.session_state.patient_data.get('triglycerides', 'N/A')} mg/dL
+- Total Cholesterol: {st.session_state.patient_data.get('total_cholesterol', 'N/A'):.0f} mg/dL
+- LDL: {st.session_state.patient_data.get('ldl_cholesterol', 'N/A'):.0f} mg/dL
+- HDL: {st.session_state.patient_data.get('hdl_cholesterol', 'N/A'):.0f} mg/dL
+- Triglycerides: {st.session_state.patient_data.get('triglycerides', 'N/A'):.0f} mg/dL
 
 RISK ASSESSMENT:
 - 36-Month DKD Risk: {risk:.1f}% (95% CI: {ci[0]:.1f}-{ci[1]:.1f}%)
