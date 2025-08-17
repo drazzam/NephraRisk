@@ -9,6 +9,19 @@ import warnings
 from typing import Dict, Tuple, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+from reportlab.pdfgen import canvas
+from reportlab.graphics.shapes import Drawing, Rect, String, Circle, Wedge
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics import renderPDF
+from reportlab.lib.colors import HexColor
+import base64
 
 # Configure Streamlit page
 st.set_page_config(
@@ -174,6 +187,272 @@ def validate_inputs(data: Dict) -> Tuple[bool, List[str]]:
         errors.append("Insulin duration cannot exceed diabetes duration")
     
     return len(errors) == 0, errors
+
+def convert_lipid_units(value: float, from_unit: str, to_unit: str, lipid_type: str) -> float:
+    """Convert lipid values between mg/dL and mmol/L"""
+    if from_unit == to_unit:
+        return value
+    
+    # Conversion factors
+    if lipid_type in ['total_cholesterol', 'ldl_cholesterol', 'hdl_cholesterol']:
+        factor = 38.67  # mg/dL per mmol/L
+    elif lipid_type == 'triglycerides':
+        factor = 88.57  # mg/dL per mmol/L
+    else:
+        return value
+    
+    if from_unit == 'mmol/L' and to_unit == 'mg/dL':
+        return value * factor
+    elif from_unit == 'mg/dL' and to_unit == 'mmol/L':
+        return value / factor
+    else:
+        return value
+
+def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float], 
+                       factors: Dict, recommendations: List[str], ckd_stage: str) -> BytesIO:
+    """Generate a professional PDF report similar to KidneyIntelX style"""
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=HexColor('#1e3a5f'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=HexColor('#1e3a5f'),
+        spaceAfter=12,
+        spaceBefore=12
+    )
+    
+    subheading_style = ParagraphStyle(
+        'CustomSubHeading',
+        parent=styles['Heading3'],
+        fontSize=12,
+        textColor=HexColor('#2c5282'),
+        spaceAfter=6
+    )
+    
+    # Header
+    story.append(Paragraph("<b>NephraRisk™</b>", title_style))
+    story.append(Paragraph("Diabetic Kidney Disease Risk Assessment Report", styles['Title']))
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Report metadata
+    report_date = datetime.now().strftime('%m/%d/%Y')
+    report_time = datetime.now().strftime('%I:%M %p')
+    
+    metadata_data = [
+        ['Report Date:', report_date, 'Report Time:', report_time],
+        ['Ordering Provider:', 'N/A', 'Medical Record #:', 'N/A']
+    ]
+    
+    metadata_table = Table(metadata_data, colWidths=[1.5*inch, 2*inch, 1.5*inch, 2*inch])
+    metadata_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (0, -1), HexColor('#666666')),
+        ('TEXTCOLOR', (2, 0), (2, -1), HexColor('#666666')),
+    ]))
+    story.append(metadata_table)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Patient Information Section
+    story.append(Paragraph("PATIENT INFORMATION", heading_style))
+    
+    sex_display = "Male" if patient_data.get('sex_male', False) else "Female"
+    patient_info_data = [
+        ['', 'NAME', 'SEX', 'DATE OF BIRTH', 'AGE'],
+        ['', 'Patient', sex_display, 'N/A', f"{patient_data.get('age', 'N/A')} years"]
+    ]
+    
+    patient_table = Table(patient_info_data, colWidths=[0.5*inch, 2*inch, 1.5*inch, 2*inch, 1.5*inch])
+    patient_table.setStyle(TableStyle([
+        ('BACKGROUND', (1, 0), (-1, 0), HexColor('#e6f2ff')),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, 1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('GRID', (1, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    story.append(patient_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Risk Assessment Section
+    story.append(Paragraph("RISK OF PROGRESSIVE DECLINE IN KIDNEY FUNCTION", heading_style))
+    
+    # Risk visualization (text-based representation)
+    risk_color = '#4CAF50' if risk < 5 else '#FFC107' if risk < 15 else '#FF9800' if risk < 30 else '#F44336'
+    risk_category = "Low" if risk < 5 else "Moderate" if risk < 15 else "High" if risk < 30 else "Very High"
+    
+    risk_box = f"""
+    <para align="center">
+    <font size="48" color="{risk_color}"><b>{risk:.0f}</b></font><br/>
+    <font size="14">36-Month Risk Score</font><br/>
+    <font size="12" color="#666666">95% CI: {ci[0]:.1f}-{ci[1]:.1f}%</font>
+    </para>
+    """
+    story.append(Paragraph(risk_box, styles['Normal']))
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Risk interpretation
+    risk_text = f"""
+    <para align="center">
+    <font size="14"><b>Patients with a {risk_category.lower()} NephraRisk score have a 
+    {risk_category.lower()} risk of progressive decline in kidney function</b></font>
+    </para>
+    """
+    story.append(Paragraph(risk_text, styles['Normal']))
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Clinical Data Summary
+    story.append(Paragraph("CLINICAL DATA SUMMARY", heading_style))
+    
+    stage_map = {
+        'no_ckd': "No CKD", 'stage_1_2': "CKD Stage 1-2",
+        'stage_3a': "CKD Stage 3a", 'stage_3b': "CKD Stage 3b", 'stage_4': "CKD Stage 4"
+    }
+    
+    clinical_data = [
+        ['Parameter', 'Value', 'Reference Range'],
+        ['eGFR', f"{patient_data.get('egfr', 'N/A')} mL/min/1.73m²", '>60'],
+        ['UACR', f"{patient_data.get('acr_mg_g', 'N/A'):.1f} mg/g", '<30'],
+        ['HbA1c', f"{patient_data.get('hba1c', 'N/A'):.1f}%", '<7.0'],
+        ['Systolic BP', f"{patient_data.get('sbp', 'N/A')} mmHg", '<130'],
+        ['LDL Cholesterol', f"{patient_data.get('ldl_cholesterol', 'N/A')} mg/dL", '<100'],
+        ['BMI', f"{patient_data.get('bmi', 'N/A'):.1f} kg/m²", '18.5-24.9'],
+        ['KDIGO Stage', stage_map.get(ckd_stage, 'N/A'), 'No CKD'],
+        ['Diabetes Duration', f"{patient_data.get('diabetes_duration', 'N/A')} years", 'N/A']
+    ]
+    
+    clinical_table = Table(clinical_data, colWidths=[2.5*inch, 2.5*inch, 2*inch])
+    clinical_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#2c5282')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, HexColor('#f5f5f5')]),
+    ]))
+    story.append(clinical_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Risk Factors
+    story.append(Paragraph("KEY RISK FACTORS", heading_style))
+    
+    if factors['risk']:
+        risk_factor_data = [['Risk Factor', 'Impact on Risk']]
+        for name, impact in factors['risk'][:10]:
+            risk_factor_data.append([name, f"+{impact:.0f}%"])
+        
+        risk_factor_table = Table(risk_factor_data, colWidths=[4*inch, 2*inch])
+        risk_factor_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor('#ffebee')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(risk_factor_table)
+    
+    if factors['protective']:
+        story.append(Spacer(1, 0.2*inch))
+        story.append(Paragraph("PROTECTIVE FACTORS", subheading_style))
+        
+        protective_data = [['Protective Factor', 'Risk Reduction']]
+        for name, impact in factors['protective']:
+            protective_data.append([name, f"-{impact:.0f}%"])
+        
+        protective_table = Table(protective_data, colWidths=[4*inch, 2*inch])
+        protective_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor('#e8f5e9')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(protective_table)
+    
+    story.append(PageBreak())
+    
+    # Clinical Recommendations
+    story.append(Paragraph("GUIDELINE-RECOMMENDED CLINICAL PATHWAY", heading_style))
+    
+    # Split recommendations into categories
+    management_recs = []
+    monitoring_recs = []
+    lifestyle_recs = []
+    
+    for rec in recommendations:
+        rec_clean = rec.replace('•', '').strip()
+        if any(word in rec_clean.lower() for word in ['monitor', 'annual', 'monthly', 'every']):
+            monitoring_recs.append(rec_clean)
+        elif any(word in rec_clean.lower() for word in ['lifestyle', 'diet', 'exercise', 'smoking', 'weight']):
+            lifestyle_recs.append(rec_clean)
+        else:
+            management_recs.append(rec_clean)
+    
+    if management_recs:
+        story.append(Paragraph("<b>Medical Management</b>", subheading_style))
+        for rec in management_recs[:8]:
+            story.append(Paragraph(f"• {rec}", styles['Normal']))
+        story.append(Spacer(1, 0.1*inch))
+    
+    if monitoring_recs:
+        story.append(Paragraph("<b>Monitoring Schedule</b>", subheading_style))
+        for rec in monitoring_recs[:5]:
+            story.append(Paragraph(f"• {rec}", styles['Normal']))
+        story.append(Spacer(1, 0.1*inch))
+    
+    if lifestyle_recs:
+        story.append(Paragraph("<b>Lifestyle Modifications</b>", subheading_style))
+        for rec in lifestyle_recs[:5]:
+            story.append(Paragraph(f"• {rec}", styles['Normal']))
+        story.append(Spacer(1, 0.1*inch))
+    
+    # Clinical guidelines reference
+    story.append(Spacer(1, 0.3*inch))
+    story.append(Paragraph("Clinical pathway recommendations based on:", styles['BodyText']))
+    guidelines_text = """
+    • KDIGO 2024 Clinical Practice Guideline for Diabetes Management in CKD<br/>
+    • American Diabetes Association Standards of Medical Care in Diabetes 2025<br/>
+    • ACC/AHA 2019 Guideline on Primary Prevention of Cardiovascular Disease
+    """
+    story.append(Paragraph(guidelines_text, styles['Normal']))
+    
+    # Footer
+    story.append(Spacer(1, 0.5*inch))
+    footer_text = f"""
+    <para align="center">
+    <font size="8" color="#666666">
+    NephraRisk™ Risk Assessment Tool v{MODEL_VERSION}<br/>
+    {REGULATORY_STATUS}<br/>
+    This report is for clinical decision support only and should not replace clinical judgment.<br/>
+    Report generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+    </font>
+    </para>
+    """
+    story.append(Paragraph(footer_text, styles['Normal']))
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 def calculate_risk_with_interactions(features: Dict, model: ClinicalValidation) -> Tuple[float, Dict, float, Tuple[float, float]]:
     """
@@ -984,24 +1263,44 @@ def main():
                     ["None", "Rare (<1/mo)", "Frequent (≥1/mo)"])
                 st.session_state.patient_data['hypoglycemia'] = hypoglycemia
         
-        # Lipid Profile Section
+        # Lipid Profile Section with Unit Selection
         with st.expander("🧪 Lipid Profile", expanded=True):
+            # Unit selection
+            lipid_unit = st.selectbox("Select Lipid Unit", ["mg/dL", "mmol/L"], 
+                                     help="Choose the unit for lipid measurements")
+            
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                total_cholesterol = st.number_input("Total Cholesterol (mg/dL)", 100, 500, 180, 5)
+                if lipid_unit == "mg/dL":
+                    total_cholesterol = st.number_input("Total Cholesterol (mg/dL)", 100.0, 500.0, 180.0, 5.0)
+                else:
+                    total_cholesterol_mmol = st.number_input("Total Cholesterol (mmol/L)", 2.6, 12.9, 4.7, 0.1)
+                    total_cholesterol = convert_lipid_units(total_cholesterol_mmol, "mmol/L", "mg/dL", "total_cholesterol")
                 st.session_state.patient_data['total_cholesterol'] = total_cholesterol
             
             with col2:
-                ldl_cholesterol = st.number_input("LDL Cholesterol (mg/dL)", 30, 300, 100, 5)
+                if lipid_unit == "mg/dL":
+                    ldl_cholesterol = st.number_input("LDL Cholesterol (mg/dL)", 30.0, 300.0, 100.0, 5.0)
+                else:
+                    ldl_cholesterol_mmol = st.number_input("LDL Cholesterol (mmol/L)", 0.8, 7.8, 2.6, 0.1)
+                    ldl_cholesterol = convert_lipid_units(ldl_cholesterol_mmol, "mmol/L", "mg/dL", "ldl_cholesterol")
                 st.session_state.patient_data['ldl_cholesterol'] = ldl_cholesterol
             
             with col3:
-                hdl_cholesterol = st.number_input("HDL Cholesterol (mg/dL)", 20, 100, 50, 5)
+                if lipid_unit == "mg/dL":
+                    hdl_cholesterol = st.number_input("HDL Cholesterol (mg/dL)", 20.0, 100.0, 50.0, 5.0)
+                else:
+                    hdl_cholesterol_mmol = st.number_input("HDL Cholesterol (mmol/L)", 0.5, 2.6, 1.3, 0.1)
+                    hdl_cholesterol = convert_lipid_units(hdl_cholesterol_mmol, "mmol/L", "mg/dL", "hdl_cholesterol")
                 st.session_state.patient_data['hdl_cholesterol'] = hdl_cholesterol
             
             with col4:
-                triglycerides = st.number_input("Triglycerides (mg/dL)", 50, 1000, 150, 10)
+                if lipid_unit == "mg/dL":
+                    triglycerides = st.number_input("Triglycerides (mg/dL)", 50.0, 1000.0, 150.0, 10.0)
+                else:
+                    triglycerides_mmol = st.number_input("Triglycerides (mmol/L)", 0.6, 11.3, 1.7, 0.1)
+                    triglycerides = convert_lipid_units(triglycerides_mmol, "mmol/L", "mg/dL", "triglycerides")
                 st.session_state.patient_data['triglycerides'] = triglycerides
         
         # Cardiovascular Section
@@ -1124,6 +1423,18 @@ def main():
                         st.session_state.patient_data, model
                     )
                 
+                # Store results in session state for PDF generation
+                st.session_state['risk_results'] = {
+                    'risk': risk,
+                    'factors': factors,
+                    'uncertainty': uncertainty,
+                    'ci': ci,
+                    'ckd_stage': calculate_ckd_stage(
+                        st.session_state.patient_data.get('egfr', 90),
+                        st.session_state.patient_data.get('acr_mg_g', 10)
+                    )
+                }
+                
                 # Display results
                 col1, col2 = st.columns([1, 1])
                 
@@ -1153,6 +1464,7 @@ def main():
                 # Clinical recommendations
                 st.markdown("### 📋 Evidence-Based Recommendations")
                 recommendations = get_clinical_recommendations(risk, factors, st.session_state.patient_data)
+                st.session_state['recommendations'] = recommendations
                 
                 rec_col1, rec_col2 = st.columns(2)
                 with rec_col1:
@@ -1167,7 +1479,7 @@ def main():
                 
                 # Export functionality
                 st.markdown("---")
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     if st.button("🔄 Calculate New Patient", use_container_width=True):
@@ -1175,6 +1487,27 @@ def main():
                         st.rerun()
                 
                 with col2:
+                    # Generate PDF Report
+                    if 'risk_results' in st.session_state:
+                        pdf_buffer = generate_pdf_report(
+                            st.session_state.patient_data,
+                            st.session_state['risk_results']['risk'],
+                            st.session_state['risk_results']['ci'],
+                            st.session_state['risk_results']['factors'],
+                            st.session_state.get('recommendations', []),
+                            st.session_state['risk_results']['ckd_stage']
+                        )
+                        
+                        st.download_button(
+                            label="📄 Download PDF Report",
+                            data=pdf_buffer,
+                            file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                
+                with col3:
+                    # Text report (existing functionality)
                     report = f""" NephraRisk Assessment Tool Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -1209,7 +1542,7 @@ This report is for clinical decision support only and should not replace clinica
                     """
                     
                     st.download_button(
-                        label="📄 Download Report",
+                        label="📄 Download Text Report",
                         data=report,
                         file_name=f"dkd_risk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                         mime="text/plain",
