@@ -1585,15 +1585,16 @@ def main():
                         st.session_state.patient_data = {}
                         st.rerun()
                 
-                with col2:
+                with export_cols[1]:
                     # Generate PDF Report with optional patient name
                     if 'risk_results' in st.session_state:
                         # Use form to properly capture patient name
                         with st.form(key="pdf_form"):
                             patient_name = st.text_input("Patient Name (Optional for PDF)", 
                                                         placeholder="Enter patient name or leave blank")
-                            generate_pdf = st.form_submit_button("📄 Generate & Download PDF Report", 
-                                                                use_container_width=True)
+                            generate_pdf = st.form_submit_button("📄 Generate PDF Report", 
+                                                                use_container_width=True,
+                                                                type="primary")
                         
                         if generate_pdf:
                             # Generate PDF with proper name handling
@@ -1611,9 +1612,15 @@ def main():
                                 patient_name_for_pdf
                             )
                             
+                            # Store PDF in session state for download
+                            st.session_state['pdf_buffer'] = pdf_buffer
+                            st.session_state['pdf_generated'] = True
+                        
+                        # Show download button if PDF was generated
+                        if st.session_state.get('pdf_generated', False):
                             st.download_button(
-                                label="📥 Download PDF Report",
-                                data=pdf_buffer,
+                                label="📥 Download PDF",
+                                data=st.session_state['pdf_buffer'],
                                 file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                 mime="application/pdf",
                                 use_container_width=True,
