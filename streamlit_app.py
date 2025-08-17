@@ -12,7 +12,7 @@ from enum import Enum
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="NephraRisk - Clinical DKD Risk Assessment",
+    page_title="NephraRisk Risk Assessment Tool",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -805,18 +805,15 @@ def create_factors_waterfall(factors: Dict):
 # Main Application
 def main():
     # Header with compliance information
-    st.title("🏥 NephraRisk - Clinical DKD Risk Assessment Tool")
+    st.title("🏥 NephraRisk Risk Assessment Tool")
     
     # Disclaimer
     with st.expander("⚠️ Important Information - Please Read", expanded=False):
         st.warning(f"""
         **Regulatory Status:** {REGULATORY_STATUS}
-        
-        **Model Version:** {MODEL_VERSION} (Calibrated: {LAST_CALIBRATION})
-        
+                
         **Intended Use:**
         - Clinical decision support for healthcare professionals
-        - Risk stratification for diabetic kidney disease
         - Not intended to replace clinical judgment
         
         **Validation:**
@@ -824,7 +821,6 @@ def main():
         - Calibration slope: 0.98 (Well-calibrated)
         - Sensitivity: 84% at 15% threshold
         - Specificity: 87% at 15% threshold
-        - Validated on 18,742 patients
         
         **Limitations:**
         - Requires complete clinical data for accuracy
@@ -843,7 +839,7 @@ def main():
     # Sidebar for quick actions
     with st.sidebar:
         st.header("Quick Actions")
-        if st.button("📥 Load Example Patient"):
+        if st.button("📥 Load Sample Testing Data"):
             st.session_state.patient_data = {
                 'age': 65, 'sex_male': True, 'ethnicity': 'white', 'bmi': 29,
                 'egfr': 55, 'acr_mg_g': 150, 'hba1c': 8.2,
@@ -1180,9 +1176,8 @@ def main():
                 
                 with col2:
                     report = f"""
-DIABETIC KIDNEY DISEASE RISK ASSESSMENT REPORT
+NephraRisk Assessment Tool Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Model Version: {MODEL_VERSION}
 
 PATIENT SUMMARY:
 - Age: {st.session_state.patient_data.get('age', 'N/A')} years
@@ -1233,16 +1228,6 @@ This report is for clinical decision support only and should not replace clinica
             - **C-statistic:** 0.852 (95% CI: 0.841-0.863)
             - **Calibration Slope:** 0.98 (95% CI: 0.94-1.02)
             - **Brier Score:** 0.085
-            - **Validation Cohort:** 18,742 patients
-            - **Data Sources:** ACCORD, UKPDS, ADVANCE, CANVAS trials
-            
-            ### Key Publications
-            1. KDIGO 2024 Clinical Practice Guideline for CKD
-            2. CREDENCE Trial (NEJM 2019)
-            3. DAPA-CKD Trial (NEJM 2020)
-            4. EMPA-KIDNEY Trial (NEJM 2023)
-            5. FIDELIO-DKD Trial (NEJM 2020)
-            6. FLOW Trial - Semaglutide (NEJM 2024)
             """)
         
         with col2:
@@ -1282,11 +1267,6 @@ This report is for clinical decision support only and should not replace clinica
             - Minimum: age, sex, eGFR, UACR, HbA1c
             - Optimal: Complete clinical profile including lipids, BP, medications
             - Laboratory values should be within 3 months
-            
-            **Quality Assurance:**
-            - Model recalibrated quarterly
-            - Performance monitored continuously
-            - Updated with latest trial evidence
             """)
 
 if __name__ == "__main__":
