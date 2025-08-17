@@ -484,12 +484,9 @@ def main():
     with st.expander("⚠️ Important Information - Please Read", expanded=False):
         st.warning(f"""
         **Regulatory Status:** {REGULATORY_STATUS}
-        
-        **Model Version:** {MODEL_VERSION} (Calibrated: {LAST_CALIBRATION})
-        
+                
         **Intended Use:**
         - Clinical decision support for healthcare professionals
-        - Risk stratification for diabetic kidney disease
         - Not intended to replace clinical judgment
         
         **Validation:**
@@ -517,9 +514,9 @@ def main():
         st.markdown("---")
         st.markdown("### Clinical Guidelines")
         st.markdown("""
-        - [KDIGO 2024 CKD Guidelines](https://kdigo.org)
-        - [ADA Standards of Care 2025](https://diabetes.org)
-        - [ACC/AHA ASCVD Risk Calculator](https://tools.acc.org)
+        - [KDIGO 2024 CKD Guidelines](https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf)
+        - [ADA Standards of Care 2025](https://diabetesjournals.org/care/issue/48/Supplement_1)
+        - [ACC/AHA ASCVD Risk Calculator](https://tools.acc.org/ascvd-risk-estimator-plus/#!/calculate/estimate/)
         """)
     
     # Main content with tabs
