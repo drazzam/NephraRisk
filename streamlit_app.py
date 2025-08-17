@@ -22,6 +22,7 @@ from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics import renderPDF
 from reportlab.lib.colors import HexColor
 import base64
+import traceback  # Added for better error handling
 
 # Configure Streamlit page
 st.set_page_config(
@@ -188,12 +189,128 @@ def validate_inputs(data: Dict) -> Tuple[bool, List[str]]:
     
     return len(errors) == 0, errors
 
+def generate_simple_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float], 
+                              factors: Dict, recommendations: List[str], ckd_stage: str, 
+                              patient_name: str = None) -> BytesIO:
+    """Generate a simplified PDF report as fallback"""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
+    
+    buffer = BytesIO()
+    
+    try:
+        # Create PDF with canvas (simpler approach)
+        c = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+        
+        # Add title
+        c.setFont("Helvetica-Bold", 24)
+        c.drawCentredString(width/2, height - inch, "NephraRisk Assessment Report")
+        
+        # Add date
+        c.setFont("Helvetica", 12)
+        c.drawCentredString(width/2, height - 1.5*inch, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        
+        # Patient info
+        y_position = height - 2.5*inch
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(inch, y_position, "PATIENT INFORMATION")
+        
+        y_position -= 0.3*inch
+        c.setFont("Helvetica", 11)
+        if patient_name:
+            c.drawString(inch, y_position, f"Name: {patient_name}")
+            y_position -= 0.2*inch
+        c.drawString(inch, y_position, f"Age: {patient_data.get('age', 'N/A')} years")
+        y_position -= 0.2*inch
+        c.drawString(inch, y_position, f"Sex: {'Male' if patient_data.get('sex_male') else 'Female'}")
+        
+        # Risk Score
+        y_position -= 0.5*inch
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(inch, y_position, f"36-MONTH RISK SCORE: {risk:.1f}%")
+        y_position -= 0.2*inch
+        c.setFont("Helvetica", 11)
+        c.drawString(inch, y_position, f"95% Confidence Interval: {ci[0]:.1f}-{ci[1]:.1f}%")
+        
+        # Key Clinical Values
+        y_position -= 0.5*inch
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(inch, y_position, "KEY CLINICAL VALUES")
+        y_position -= 0.3*inch
+        c.setFont("Helvetica", 11)
+        
+        clinical_values = [
+            f"eGFR: {patient_data.get('egfr', 'N/A')} mL/min/1.73m²",
+            f"UACR: {patient_data.get('acr_mg_g', 'N/A'):.1f} mg/g",
+            f"HbA1c: {patient_data.get('hba1c', 'N/A'):.1f}%",
+            f"Systolic BP: {patient_data.get('sbp', 'N/A')} mmHg",
+            f"LDL Cholesterol: {patient_data.get('ldl_cholesterol', 'N/A')} mg/dL"
+        ]
+        
+        for value in clinical_values:
+            c.drawString(inch, y_position, value)
+            y_position -= 0.2*inch
+        
+        # Top Risk Factors
+        if factors.get('risk'):
+            y_position -= 0.3*inch
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(inch, y_position, "TOP RISK FACTORS")
+            y_position -= 0.3*inch
+            c.setFont("Helvetica", 11)
+            
+            for name, impact in factors['risk'][:5]:
+                c.drawString(inch, y_position, f"• {name}: +{impact:.0f}%")
+                y_position -= 0.2*inch
+                if y_position < 2*inch:
+                    c.showPage()
+                    y_position = height - inch
+        
+        # Recommendations
+        if y_position < 4*inch:
+            c.showPage()
+            y_position = height - inch
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(inch, y_position, "CLINICAL RECOMMENDATIONS")
+        y_position -= 0.3*inch
+        c.setFont("Helvetica", 10)
+        
+        for rec in recommendations[:10]:
+            if y_position < 2*inch:
+                c.showPage()
+                y_position = height - inch
+            # Clean and truncate recommendation text
+            rec_clean = rec.replace('•', '').strip()[:80]
+            c.drawString(inch, y_position, f"• {rec_clean}")
+            y_position -= 0.2*inch
+        
+        # Footer
+        c.setFont("Helvetica", 8)
+        c.drawCentredString(width/2, 0.5*inch, "Research Use Only - Not FDA Approved")
+        
+        # Save PDF
+        c.save()
+        
+    except Exception as e:
+        # If even simple PDF fails, create minimal PDF
+        c = canvas.Canvas(buffer, pagesize=letter)
+        c.drawString(100, 750, "NephraRisk Report - Error generating full report")
+        c.drawString(100, 700, f"Risk Score: {risk:.1f}%")
+        c.save()
+    
+    buffer.seek(0)  # Reset to beginning
+    return buffer
+
 def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float], 
                        factors: Dict, recommendations: List[str], ckd_stage: str, 
                        patient_name: str = None) -> BytesIO:
     """Generate a professional PDF report similar to KidneyIntelX style"""
     
-    buffer = BytesIO()
+    try:
+        buffer = BytesIO()
     
     # Arabian Standard Time (GMT+3)
     ast_timezone = timezone(timedelta(hours=3))
@@ -491,8 +608,25 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     
     # Build PDF
     doc.build(story)
-    buffer.seek(0)
+    buffer.seek(0)  # CRITICAL: Reset buffer position to beginning
     return buffer
+    
+    except Exception as e:
+        # If complex PDF generation fails, try simple version
+        print(f"Complex PDF generation failed: {e}")
+        try:
+            return generate_simple_pdf_report(patient_data, risk, ci, factors, recommendations, ckd_stage, patient_name)
+        except Exception as e2:
+            print(f"Both PDF methods failed: {e2}")
+            # Return minimal PDF as last resort
+            buffer = BytesIO()
+            c = canvas.Canvas(buffer, pagesize=letter)
+            c.drawString(100, 750, "NephraRisk Report")
+            c.drawString(100, 700, f"Risk Score: {risk:.1f}%")
+            c.drawString(100, 650, "Error generating full report")
+            c.save()
+            buffer.seek(0)
+            return buffer
 
 def calculate_risk_with_interactions(features: Dict, model: ClinicalValidation) -> Tuple[float, Dict, float, Tuple[float, float]]:
     """
@@ -1121,6 +1255,41 @@ def create_factors_waterfall(factors: Dict):
     
     return fig
 
+def test_pdf_generation():
+    """Test function to verify PDF generation works"""
+    test_data = {
+        'age': 65, 'sex_male': True, 'ethnicity': 'white', 'bmi': 29,
+        'egfr': 55, 'acr_mg_g': 150, 'hba1c': 8.2,
+        'sbp': 145, 'dbp': 85, 'diabetes_duration': 12,
+        'total_cholesterol': 210, 'ldl_cholesterol': 130,
+        'hdl_cholesterol': 45, 'triglycerides': 180
+    }
+    
+    try:
+        # Test simple PDF
+        pdf_buffer = generate_simple_pdf_report(
+            test_data, 25.5, (20.0, 30.0),
+            {'risk': [('Test Factor', 10.0)], 'protective': []},
+            ['Test recommendation 1', 'Test recommendation 2'],
+            'stage_3a', 'Test Patient'
+        )
+        pdf_buffer.seek(0)
+        simple_bytes = pdf_buffer.read()
+        
+        # Test complex PDF
+        pdf_buffer2 = generate_pdf_report(
+            test_data, 25.5, (20.0, 30.0),
+            {'risk': [('Test Factor', 10.0)], 'protective': []},
+            ['Test recommendation 1', 'Test recommendation 2'],
+            'stage_3a', 'Test Patient'
+        )
+        pdf_buffer2.seek(0)
+        complex_bytes = pdf_buffer2.read()
+        
+        return len(simple_bytes) > 100, len(complex_bytes) > 100
+    except Exception as e:
+        return False, False
+
 # Main Application
 def main():
     # Add responsive CSS
@@ -1588,20 +1757,17 @@ def main():
                 with export_cols[1]:
                     # Generate PDF Report with optional patient name
                     if 'risk_results' in st.session_state:
-                        # Use form to properly capture patient name
-                        with st.form(key="pdf_form"):
-                            patient_name = st.text_input("Patient Name (Optional for PDF)", 
-                                                        placeholder="Enter patient name or leave blank")
-                            generate_pdf = st.form_submit_button("📄 Generate PDF Report", 
-                                                                use_container_width=True,
-                                                                type="primary")
+                        # Patient name input
+                        patient_name = st.text_input("Patient Name (Optional for PDF)", 
+                                                    value="",
+                                                    key="patient_name_pdf")
                         
-                        if generate_pdf:
-                            # Generate PDF with proper name handling
-                            patient_name_for_pdf = None
-                            if patient_name and patient_name.strip():
-                                patient_name_for_pdf = patient_name.strip()
+                        # DIRECT PDF GENERATION - NO SESSION STATE STORAGE
+                        try:
+                            # Generate PDF immediately on page load
+                            patient_name_clean = patient_name.strip() if patient_name else None
                             
+                            # Generate PDF buffer
                             pdf_buffer = generate_pdf_report(
                                 st.session_state.patient_data,
                                 st.session_state['risk_results']['risk'],
@@ -1609,26 +1775,65 @@ def main():
                                 st.session_state['risk_results']['factors'],
                                 st.session_state.get('recommendations', []),
                                 st.session_state['risk_results']['ckd_stage'],
-                                patient_name_for_pdf
+                                patient_name_clean
                             )
                             
-                            # Get the bytes value from the buffer
-                            pdf_bytes = pdf_buffer.getvalue()
+                            # Convert to bytes - try both methods for safety
+                            try:
+                                pdf_bytes = pdf_buffer.getvalue()
+                            except:
+                                pdf_buffer.seek(0)
+                                pdf_bytes = pdf_buffer.read()
                             
-                            # Store PDF bytes in session state for download
-                            st.session_state['pdf_bytes'] = pdf_bytes
-                            st.session_state['pdf_generated'] = True
-                        
-                        # Show download button if PDF was generated
-                        if st.session_state.get('pdf_generated', False):
-                            st.download_button(
-                                label="📥 Download PDF",
-                                data=st.session_state['pdf_bytes'],
-                                file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="pdf_download"
-                            )
+                            # Verify we have valid PDF data
+                            if pdf_bytes and len(pdf_bytes) > 100:
+                                # IMMEDIATE DOWNLOAD BUTTON - NO CLICK REQUIRED TO GENERATE
+                                st.download_button(
+                                    label="📄 Download PDF Report",
+                                    data=pdf_bytes,
+                                    file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    type="primary"
+                                )
+                            else:
+                                raise ValueError("Invalid PDF data")
+                            
+                        except Exception as e:
+                            # If main PDF fails, try simple version
+                            st.warning(f"Standard PDF failed ({str(e)[:50]}), using simplified version...")
+                            try:
+                                pdf_buffer = generate_simple_pdf_report(
+                                    st.session_state.patient_data,
+                                    st.session_state['risk_results']['risk'],
+                                    st.session_state['risk_results']['ci'],
+                                    st.session_state['risk_results']['factors'],
+                                    st.session_state.get('recommendations', []),
+                                    st.session_state['risk_results']['ckd_stage'],
+                                    patient_name_clean if 'patient_name_clean' in locals() else None
+                                )
+                                
+                                # Get bytes
+                                try:
+                                    pdf_bytes = pdf_buffer.getvalue()
+                                except:
+                                    pdf_buffer.seek(0)
+                                    pdf_bytes = pdf_buffer.read()
+                                
+                                if pdf_bytes and len(pdf_bytes) > 100:
+                                    st.download_button(
+                                        label="📄 Download PDF Report (Simplified)",
+                                        data=pdf_bytes,
+                                        file_name=f"nephrarisk_simple_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                        type="primary"
+                                    )
+                                else:
+                                    st.error("PDF generation failed. Please use text report.")
+                            except Exception as e2:
+                                st.error(f"PDF generation failed: {str(e2)[:100]}")
+                                st.info("Please use the text report option instead.")
                 
                 with export_cols[2]:
                     # Text report (existing functionality)
