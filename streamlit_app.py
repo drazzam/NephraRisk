@@ -593,9 +593,6 @@ def main():
                 
                 st.session_state.patient_data['acr_mg_g'] = acr_mg_g
             
-            with col4:
-                st.metric("eGFR Slope", f"{egfr_slope:.1f} mL/min/year",
-                    delta="Rapid decline" if egfr_slope < -5 else "Stable")
                 
                 # Show KDIGO category
                 ckd_stage = calculate_ckd_stage(egfr, acr_mg_g)
