@@ -1516,6 +1516,12 @@ def main():
                         st.rerun()
                 
                 with col2:
+                    # Generate PDF Report with optional patient name
+                    if 'risk_results' in st.session_state:
+                        # Generate PDF with proper name handling
+                        patient_name_for_pdf = None
+                        if patient_name and patient_name.strip():
+                            patient_name_for_pdf = patient_name.strip()
                         
                         pdf_buffer = generate_pdf_report(
                             st.session_state.patient_data,
