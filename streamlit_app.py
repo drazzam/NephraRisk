@@ -188,28 +188,9 @@ def validate_inputs(data: Dict) -> Tuple[bool, List[str]]:
     
     return len(errors) == 0, errors
 
-def convert_lipid_units(value: float, from_unit: str, to_unit: str, lipid_type: str) -> float:
-    """Convert lipid values between mg/dL and mmol/L"""
-    if from_unit == to_unit:
-        return value
-    
-    # Conversion factors
-    if lipid_type in ['total_cholesterol', 'ldl_cholesterol', 'hdl_cholesterol']:
-        factor = 38.67  # mg/dL per mmol/L
-    elif lipid_type == 'triglycerides':
-        factor = 88.57  # mg/dL per mmol/L
-    else:
-        return value
-    
-    if from_unit == 'mmol/L' and to_unit == 'mg/dL':
-        return value * factor
-    elif from_unit == 'mg/dL' and to_unit == 'mmol/L':
-        return value / factor
-    else:
-        return value
-
 def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float], 
-                       factors: Dict, recommendations: List[str], ckd_stage: str) -> BytesIO:
+                       factors: Dict, recommendations: List[str], ckd_stage: str, 
+                       patient_name: str = None) -> BytesIO:
     """Generate a professional PDF report similar to KidneyIntelX style"""
     
     buffer = BytesIO()
@@ -291,9 +272,11 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(Paragraph("PATIENT INFORMATION", heading_style))
     
     sex_display = "Male" if patient_data.get('sex_male', False) else "Female"
+    patient_name_display = patient_name if patient_name else "N/A"
+    
     patient_info_data = [
         ['', 'NAME', 'SEX', 'AGE'],
-        ['', 'Patient', sex_display, f"{patient_data.get('age', 'N/A')} years"]
+        ['', patient_name_display, sex_display, f"{patient_data.get('age', 'N/A')} years"]
     ]
     
     patient_table = Table(patient_info_data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 2*inch])
@@ -308,45 +291,37 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(patient_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Risk Assessment Section with proper spacing
+    # Risk Assessment Section with better spacing
     story.append(Paragraph("RISK OF PROGRESSIVE DECLINE IN KIDNEY FUNCTION", heading_style))
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.3*inch))
     
-    # Risk score display with better spacing
+    # Risk visualization with fixed spacing
     risk_color = '#4CAF50' if risk < 5 else '#FFC107' if risk < 15 else '#FF9800' if risk < 30 else '#F44336'
     risk_category = "Low" if risk < 5 else "Moderate" if risk < 15 else "High" if risk < 30 else "Very High"
     
-    # Risk score - properly separated
-    risk_score_style = ParagraphStyle(
-        'RiskScore',
-        parent=styles['Normal'],
-        fontSize=48,
-        textColor=HexColor(risk_color),
-        alignment=TA_CENTER,
-        spaceAfter=10
-    )
+    # Create a table to properly align risk components
+    risk_display_data = [
+        [f'<font size="48" color="{risk_color}"><b>{risk:.0f}</b></font>'],
+        ['<font size="14">36-Month Risk Score</font>'],
+        [f'<font size="12" color="#666666">95% CI: {ci[0]:.1f}-{ci[1]:.1f}%</font>']
+    ]
     
-    risk_label_style = ParagraphStyle(
-        'RiskLabel',
-        parent=styles['Normal'],
-        fontSize=14,
-        alignment=TA_CENTER,
-        spaceAfter=6
-    )
+    risk_table = Table(risk_display_data, colWidths=[7*inch])
+    risk_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
     
-    risk_ci_style = ParagraphStyle(
-        'RiskCI',
-        parent=styles['Normal'],
-        fontSize=12,
-        textColor=HexColor('#666666'),
-        alignment=TA_CENTER,
-        spaceAfter=20
-    )
+    for row in risk_display_data:
+        para = Paragraph(row[0], styles['Normal'])
+        story.append(para)
+        story.append(Spacer(1, 0.1*inch))
     
-    # Add risk components separately to avoid overlap
-    story.append(Paragraph(f"<b>{risk:.0f}</b>", risk_score_style))
-    story.append(Paragraph("36-Month Risk Score", risk_label_style))
-    story.append(Paragraph(f"95% CI: {ci[0]:.1f}-{ci[1]:.1f}%", risk_ci_style))
+    story.append(Spacer(1, 0.2*inch))
     
     # Risk interpretation
     risk_interpretation_style = ParagraphStyle(
@@ -363,7 +338,7 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
         f"{risk_category.lower()} risk of progressive decline in kidney function</b>",
         risk_interpretation_style
     ))
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.3*inch))
     
     # Clinical Data Summary
     story.append(Paragraph("CLINICAL DATA SUMMARY", heading_style))
@@ -397,9 +372,11 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, HexColor('#f5f5f5')]),
     ]))
     story.append(clinical_table)
-    story.append(Spacer(1, 0.3*inch))
     
-    # Risk Factors
+    # Force page break before Risk Factors
+    story.append(PageBreak())
+    
+    # Risk Factors - Now on second page
     story.append(Paragraph("KEY RISK FACTORS", heading_style))
     
     if factors['risk']:
@@ -1311,45 +1288,34 @@ def main():
                     ["None", "Rare (<1/mo)", "Frequent (≥1/mo)"])
                 st.session_state.patient_data['hypoglycemia'] = hypoglycemia
         
-        # Lipid Profile Section with Unit Selection
+        # Lipid Profile Section (Fixed to mg/dL only)
         with st.expander("🧪 Lipid Profile", expanded=True):
-            # Unit selection
-            lipid_unit = st.selectbox("Select Lipid Unit", ["mg/dL", "mmol/L"], 
-                                     help="Choose the unit for lipid measurements")
-            
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                if lipid_unit == "mg/dL":
-                    total_cholesterol = st.number_input("Total Cholesterol (mg/dL)", 100.0, 500.0, 180.0, 5.0)
-                else:
-                    total_cholesterol_mmol = st.number_input("Total Cholesterol (mmol/L)", 2.6, 12.9, 4.7, 0.1)
-                    total_cholesterol = convert_lipid_units(total_cholesterol_mmol, "mmol/L", "mg/dL", "total_cholesterol")
+                total_cholesterol = st.number_input("Total Cholesterol (mg/dL)", 100, 500, 180, 5)
                 st.session_state.patient_data['total_cholesterol'] = total_cholesterol
             
             with col2:
-                if lipid_unit == "mg/dL":
-                    ldl_cholesterol = st.number_input("LDL Cholesterol (mg/dL)", 30.0, 300.0, 100.0, 5.0)
-                else:
-                    ldl_cholesterol_mmol = st.number_input("LDL Cholesterol (mmol/L)", 0.8, 7.8, 2.6, 0.1)
-                    ldl_cholesterol = convert_lipid_units(ldl_cholesterol_mmol, "mmol/L", "mg/dL", "ldl_cholesterol")
+                ldl_cholesterol = st.number_input("LDL Cholesterol (mg/dL)", 30, 300, 100, 5)
                 st.session_state.patient_data['ldl_cholesterol'] = ldl_cholesterol
             
             with col3:
-                if lipid_unit == "mg/dL":
-                    hdl_cholesterol = st.number_input("HDL Cholesterol (mg/dL)", 20.0, 100.0, 50.0, 5.0)
-                else:
-                    hdl_cholesterol_mmol = st.number_input("HDL Cholesterol (mmol/L)", 0.5, 2.6, 1.3, 0.1)
-                    hdl_cholesterol = convert_lipid_units(hdl_cholesterol_mmol, "mmol/L", "mg/dL", "hdl_cholesterol")
+                hdl_cholesterol = st.number_input("HDL Cholesterol (mg/dL)", 20, 100, 50, 5)
                 st.session_state.patient_data['hdl_cholesterol'] = hdl_cholesterol
             
             with col4:
-                if lipid_unit == "mg/dL":
-                    triglycerides = st.number_input("Triglycerides (mg/dL)", 50.0, 1000.0, 150.0, 10.0)
-                else:
-                    triglycerides_mmol = st.number_input("Triglycerides (mmol/L)", 0.6, 11.3, 1.7, 0.1)
-                    triglycerides = convert_lipid_units(triglycerides_mmol, "mmol/L", "mg/dL", "triglycerides")
+                triglycerides = st.number_input("Triglycerides (mg/dL)", 50, 1000, 150, 10)
                 st.session_state.patient_data['triglycerides'] = triglycerides
+            
+            # Display conversion to mmol/L for reference
+            st.info(f"""
+            **Conversions to mmol/L (for reference):**
+            • Total Cholesterol: {total_cholesterol / 38.67:.1f} mmol/L
+            • LDL Cholesterol: {ldl_cholesterol / 38.67:.1f} mmol/L  
+            • HDL Cholesterol: {hdl_cholesterol / 38.67:.1f} mmol/L
+            • Triglycerides: {triglycerides / 88.57:.1f} mmol/L
+            """)
         
         # Cardiovascular Section
         with st.expander("❤️ Cardiovascular Risk", expanded=True):
@@ -1535,15 +1501,20 @@ def main():
                         st.rerun()
                 
                 with col2:
-                    # Generate PDF Report
+                    # Generate PDF Report with optional patient name
                     if 'risk_results' in st.session_state:
+                        # Optional patient name input
+                        patient_name = st.text_input("Patient Name (Optional for PDF)", 
+                                                    placeholder="Enter patient name or leave blank")
+                        
                         pdf_buffer = generate_pdf_report(
                             st.session_state.patient_data,
                             st.session_state['risk_results']['risk'],
                             st.session_state['risk_results']['ci'],
                             st.session_state['risk_results']['factors'],
                             st.session_state.get('recommendations', []),
-                            st.session_state['risk_results']['ckd_stage']
+                            st.session_state['risk_results']['ckd_stage'],
+                            patient_name if patient_name else None
                         )
                         
                         st.download_button(
@@ -1556,6 +1527,10 @@ def main():
                 
                 with col3:
                     # Text report (existing functionality)
+                    stage_map = {
+                        'no_ckd': "No CKD", 'stage_1_2': "CKD 1-2",
+                        'stage_3a': "CKD 3a", 'stage_3b': "CKD 3b", 'stage_4': "CKD 4"
+                    }
                     report = f""" NephraRisk Assessment Tool Report
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -1573,10 +1548,10 @@ KIDNEY FUNCTION:
 
 METABOLIC CONTROL:
 - HbA1c: {st.session_state.patient_data.get('hba1c', 'N/A'):.1f}%
-- Total Cholesterol: {st.session_state.patient_data.get('total_cholesterol', 'N/A'):.0f} mg/dL
-- LDL: {st.session_state.patient_data.get('ldl_cholesterol', 'N/A'):.0f} mg/dL
-- HDL: {st.session_state.patient_data.get('hdl_cholesterol', 'N/A'):.0f} mg/dL
-- Triglycerides: {st.session_state.patient_data.get('triglycerides', 'N/A'):.0f} mg/dL
+- Total Cholesterol: {st.session_state.patient_data.get('total_cholesterol', 'N/A')} mg/dL
+- LDL: {st.session_state.patient_data.get('ldl_cholesterol', 'N/A')} mg/dL
+- HDL: {st.session_state.patient_data.get('hdl_cholesterol', 'N/A')} mg/dL
+- Triglycerides: {st.session_state.patient_data.get('triglycerides', 'N/A')} mg/dL
 
 RISK ASSESSMENT:
 - 36-Month DKD Risk: {risk:.1f}% (95% CI: {ci[0]:.1f}-{ci[1]:.1f}%)
