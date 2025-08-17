@@ -12,15 +12,13 @@ from enum import Enum
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="NephraRisk Pro - Clinical DKD Risk Assessment",
+    page_title="NephraRisk Risk Assessment Tool",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # Version and compliance information
-MODEL_VERSION = "2.0.0"
-LAST_CALIBRATION = "2025-01-15"
 REGULATORY_STATUS = "Research Use Only - Not FDA Approved"
 
 class RiskCategory(Enum):
@@ -36,7 +34,6 @@ class ModelMetrics:
     c_statistic: float = 0.842
     calibration_slope: float = 0.98
     brier_score: float = 0.089
-    validation_n: int = 15432
     validation_cohort: str = "ACCORD-MIND + UKPDS"
 
 class ClinicalValidation:
