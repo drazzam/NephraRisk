@@ -492,7 +492,6 @@ def main():
         **Validation:**
         - C-statistic: 0.842
         - Calibration slope: 0.98
-        - Validated on 15,432 patients
         
         **Limitations:**
         - Requires complete clinical data for accuracy
