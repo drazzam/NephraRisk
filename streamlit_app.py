@@ -17,9 +17,9 @@ st.set_page_config(
 # Enhanced Model with Additional Clinical Variables
 class DKDModelCoefficients:
     def __init__(self):
-        # Base risk parameters (properly calibrated)
-        self.base_monthly_risk_incident = 0.002  # 0.2% per month baseline for healthy
-        self.base_monthly_risk_progression = 0.008  # 0.8% per month baseline for existing DKD
+        # Base risk parameters (properly calibrated for truly low-risk patients)
+        self.base_monthly_risk_incident = 0.0008  # 0.08% per month baseline for healthy
+        self.base_monthly_risk_progression = 0.005  # 0.5% per month baseline for existing DKD
         
         # Risk multipliers (properly scaled with new variables)
         self.risk_factors = {
@@ -325,19 +325,19 @@ def calculate_dynamic_risk(features, coefficients):
     # Calculate final monthly risk
     final_monthly_risk = monthly_risk * risk_multiplier
     
-    # Cap monthly risk to realistic bounds
+    # Only cap maximum risk, allow very low risks for healthy patients
     final_monthly_risk = min(final_monthly_risk, 0.15)  # Max 15% per month
-    final_monthly_risk = max(final_monthly_risk, 0.0005)  # Min 0.05% per month
+    # NO minimum floor - allow truly low risks for healthy patients
     
     # Calculate 36-month cumulative risk
     survival_probability = (1 - final_monthly_risk) ** 36
     cumulative_risk_36_months = (1 - survival_probability) * 100  # Convert to percentage
     
     # Only add male sex as a factor if there are other significant risk factors present
-    # or if overall risk is elevated (>10%)
+    # or if overall risk is elevated (>5%)
     if features.get('sex_male') and sex_contribution > 1.0:
-        if len(active_factors['risk']) > 0 or cumulative_risk_36_months > 10:
-            active_factors['risk'].append(("Male Sex", (sex_contribution - 1.0) * 100))  # Convert to percentage contribution
+        if len(active_factors['risk']) > 0 or cumulative_risk_36_months > 5:
+            active_factors['risk'].append(("Male Sex", (sex_contribution - 1.0) * 100))
     
     return cumulative_risk_36_months, active_factors, model_type
 
@@ -390,33 +390,37 @@ def create_risk_factors_chart(active_factors):
     # Take up to 10 factors
     display_factors = all_factors[:10]
     
-    # Create values and colors
+    # Create values and colors based on actual impact percentages
+    factor_names = []
     values = []
     colors = []
     
-    for factor in display_factors:
-        if factor in active_factors['risk']:
-            values.append(1)
+    for factor_name, factor_impact in display_factors:
+        factor_names.append(factor_name)
+        if (factor_name, factor_impact) in active_factors['risk']:
+            values.append(factor_impact)  # Use actual percentage for bar length
             colors.append('red')
         else:
-            values.append(-1)
+            values.append(factor_impact)  # Use actual percentage for bar length
             colors.append('green')
     
     fig = go.Figure(go.Bar(
         x=values,
-        y=display_factors,
+        y=factor_names,
         orientation='h',
         marker_color=colors,
-        showlegend=False
+        showlegend=False,
+        text=None,  # Don't show values on bars
+        textposition="none"
     ))
     
     fig.update_layout(
         title="Risk Factors",
-        xaxis_title="Effect",
+        xaxis_title="Impact",
         yaxis_title="",
         height=max(300, len(display_factors) * 35),
         yaxis={'categoryorder': 'total ascending'},
-        xaxis={'showticklabels': False}
+        xaxis={'showticklabels': False}  # Hide axis values
     )
     
     return fig
@@ -501,10 +505,6 @@ def main():
         triglycerides = st.number_input("Triglycerides", min_value=50, max_value=1000, value=120)
         st.session_state.patient_data['triglycerides'] = triglycerides
     
-    # Display lipid assessment
-    lipid_assessment = get_lipid_category(total_cholesterol, ldl_cholesterol, hdl_cholesterol, triglycerides)
-    st.info(f"Lipid Profile Assessment: {lipid_assessment}")
-    
     # Blood Pressure
     st.subheader("Blood Pressure")
     col1, col2, col3 = st.columns(3)
@@ -534,22 +534,6 @@ def main():
         help="Enter the 10-year ASCVD risk percentage from the ACC/AHA Risk Estimator Plus"
     )
     st.session_state.patient_data['ascvd_risk_percent'] = ascvd_risk_percent
-    
-    # Risk categorization
-    if ascvd_risk_percent < 5:
-        ascvd_category = "Low Risk"
-        ascvd_color = "green"
-    elif ascvd_risk_percent < 7.5:
-        ascvd_category = "Borderline Risk"
-        ascvd_color = "yellow"
-    elif ascvd_risk_percent < 20:
-        ascvd_category = "Intermediate Risk"
-        ascvd_color = "orange"
-    else:
-        ascvd_category = "High Risk"
-        ascvd_color = "red"
-    
-    st.markdown(f"**ASCVD Risk Category**: :{ascvd_color}[{ascvd_category}]")
     
     # Diabetes Complications
     st.subheader("Diabetes Complications")
@@ -665,7 +649,7 @@ def main():
             fig_gauge = create_risk_gauge(risk_percentage)
             st.plotly_chart(fig_gauge, use_container_width=True)
             
-            st.metric("36-Month Risk", f"{risk_percentage:.1f}%")
+            st.metric("36-Month Risk", f"{risk_percentage:.2f}%")
             
             # Show model type used
             if model_type == "incident":
@@ -689,13 +673,13 @@ def main():
             
             if active_factors['risk']:
                 st.write("**Factors Increasing Risk:**")
-                for factor in active_factors['risk']:
-                    st.write(f"• {factor}")
+                for factor_name, factor_impact in active_factors['risk']:
+                    st.write(f"• {factor_name} (+{factor_impact:.0f}%)")
             
             if active_factors['protective']:
                 st.write("**Protective Factors:**")
-                for factor in active_factors['protective']:
-                    st.write(f"• {factor}")
+                for factor_name, factor_impact in active_factors['protective']:
+                    st.write(f"• {factor_name} (-{factor_impact:.0f}%)")
         else:
             st.write("• Patient has a low baseline risk profile with good diabetes control and normal kidney function.")
             st.write("• Continue current diabetes management and routine monitoring.")
