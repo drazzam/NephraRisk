@@ -1,42 +1,4 @@
-# Cardiovascular Section
-        with st.expander("❤️ Cardiovascular Risk", expanded=True):
-            cv_cols = st.columns([1, 1, 1, 1])
-            
-            with cv_cols[0]:
-                sbp = st.number_input("Systolic BP", 70, 250, 125, 5)
-                st.session_state.patient_data['sbp'] = sbp
-            
-            with cv_cols[1]:
-                dbp = st.number_input("Diastolic BP", 40, 150, 75, 5)
-                st.session_state.patient_data['dbp'] = dbp
-            
-            with cv_cols[2]:
-                ascvd_10yr = st.number_input("10-yr ASCVD Risk (%)", 0.0, 100.0, 7.5, 0.5,
-                    help="From ACC/AHA Risk Calculator")
-                st.session_state.patient_data['ascvd_risk'] = ascvd_10yr
-            
-            with cv_cols[3]:
-                cvd_history = st.selectbox("CVD History",
-                    ["None", "MI/Stroke", "Heart Failure", "PAD"])
-                st.session_state.patient_data['cvd_history'] = cvd_history != "None"
-        
-        # Lifestyle Factors Section
-        with st.expander("🏃 Lifestyle Factors", expanded=False):
-            lf_cols = st.columns([1, 1, 1, 1])
-            
-            with lf_cols[0]:
-                smoking_status = st.selectbox("Smoking Status",
-                    ["Never", "Former", "Current"],
-                    help="Tobacco use history")
-                st.session_state.patient_data['smoking_status'] = smoking_status.lower()
-            
-            with lf_cols[1]:
-                physical_activity = st.selectbox("Physical Activity",
-                    ["Active (>150 min/week)", "Moderate (75-150 min/week)", "Sedentary (<75 min/week)"])
-                st.session_state.patient_data['sedentary_lifestyle'] = "Sedentary" in physical_activity
-            
-            with lf_cols[2]:
-                diet_quality = st.selectbox("Diet Qualimport streamlit as st
+import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -1439,47 +1401,47 @@ def main():
         
         # Cardiovascular Section
         with st.expander("❤️ Cardiovascular Risk", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
+            cv_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with cv_cols[0]:
                 sbp = st.number_input("Systolic BP", 70, 250, 125, 5)
                 st.session_state.patient_data['sbp'] = sbp
             
-            with col2:
+            with cv_cols[1]:
                 dbp = st.number_input("Diastolic BP", 40, 150, 75, 5)
                 st.session_state.patient_data['dbp'] = dbp
             
-            with col3:
+            with cv_cols[2]:
                 ascvd_10yr = st.number_input("10-yr ASCVD Risk (%)", 0.0, 100.0, 7.5, 0.5,
                     help="From ACC/AHA Risk Calculator")
                 st.session_state.patient_data['ascvd_risk'] = ascvd_10yr
             
-            with col4:
+            with cv_cols[3]:
                 cvd_history = st.selectbox("CVD History",
                     ["None", "MI/Stroke", "Heart Failure", "PAD"])
                 st.session_state.patient_data['cvd_history'] = cvd_history != "None"
         
         # Lifestyle Factors Section
         with st.expander("🏃 Lifestyle Factors", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
+            lf_cols = st.columns([1, 1, 1, 1])
             
-            with col1:
+            with lf_cols[0]:
                 smoking_status = st.selectbox("Smoking Status",
                     ["Never", "Former", "Current"],
                     help="Tobacco use history")
                 st.session_state.patient_data['smoking_status'] = smoking_status.lower()
             
-            with col2:
+            with lf_cols[1]:
                 physical_activity = st.selectbox("Physical Activity",
                     ["Active (>150 min/week)", "Moderate (75-150 min/week)", "Sedentary (<75 min/week)"])
                 st.session_state.patient_data['sedentary_lifestyle'] = "Sedentary" in physical_activity
             
-            with col3:
+            with lf_cols[2]:
                 diet_quality = st.selectbox("Diet Quality",
                     ["Good (DASH/Mediterranean)", "Moderate", "Poor (High processed foods)"])
                 st.session_state.patient_data['diet_quality'] = diet_quality.split()[0].lower()
             
-            with col4:
+            with lf_cols[3]:
                 sodium_intake = st.selectbox("Sodium Intake",
                     ["Low (<2g/day)", "Moderate (2-3g/day)", "High (>3g/day)"])
                 st.session_state.patient_data['high_sodium'] = "High" in sodium_intake
