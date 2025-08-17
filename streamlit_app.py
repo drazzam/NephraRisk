@@ -25,7 +25,7 @@ import base64
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="Nephropathy Risk Assessment Tool",
+    page_title="NephraRisk Risk Assessment Tool",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -1118,7 +1118,7 @@ def create_factors_waterfall(factors: Dict):
 # Main Application
 def main():
     # Header with compliance information
-    st.title("🏥 NephraRisk Risk Assessment Tool")
+    st.title("🏥 Nephropathy Risk Assessment Tool")
     
     # Disclaimer
     with st.expander("⚠️ Important Information - Please Read", expanded=False):
