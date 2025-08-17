@@ -14,18 +14,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Properly Calibrated Model Coefficients
+# Enhanced Model with Additional Clinical Variables
 class DKDModelCoefficients:
     def __init__(self):
         # Base risk parameters (properly calibrated)
         self.base_monthly_risk_incident = 0.002  # 0.2% per month baseline for healthy
         self.base_monthly_risk_progression = 0.008  # 0.8% per month baseline for existing DKD
         
-        # Risk multipliers (properly scaled)
+        # Risk multipliers (properly scaled with new variables)
         self.risk_factors = {
             # Demographics
             'age_multiplier_per_10_years': 1.15,  # 15% increase per 10 years above 50
             'male_sex_multiplier': 1.20,  # 20% higher risk for males
+            
+            # Diabetes characteristics
+            'diabetes_duration_multiplier_per_5_years': 1.12,  # 12% increase per 5 years above 10
+            'medication_compliance_poor_multiplier': 1.35,  # 35% increase for poor compliance (<80%)
             
             # Core clinical (major impact)
             'egfr_multiplier_per_10ml_drop': 1.25,  # 25% increase per 10 mL drop below 90
@@ -35,6 +39,16 @@ class DKDModelCoefficients:
             # Blood pressure
             'sbp_multiplier_per_10mmhg': 1.05,  # 5% increase per 10 mmHg above 120
             'severe_hypertension_bonus': 1.30,  # Additional 30% if SBP >160
+            
+            # Cardiovascular risk
+            'ascvd_risk_multiplier_per_10_percent': 1.08,  # 8% increase per 10% ASCVD risk above 7.5%
+            'high_ascvd_risk_bonus': 1.25,  # Additional 25% if ASCVD risk >20%
+            
+            # Lipid profile (evidence-based)
+            'total_cholesterol_multiplier_per_50mg': 1.06,  # 6% increase per 50mg/dl above 200
+            'ldl_multiplier_per_30mg': 1.08,  # 8% increase per 30mg/dl above 100
+            'hdl_protection_per_10mg': 0.94,  # 6% protection per 10mg/dl above 40
+            'triglycerides_multiplier_per_100mg': 1.10,  # 10% increase per 100mg/dl above 150
             
             # Complications (significant multipliers)
             'retinopathy_mild_multiplier': 1.50,  # 50% increase
@@ -66,6 +80,23 @@ def get_acr_category(acr_mg_g):
         return "Microalbuminuria"
     else:
         return "Macroalbuminuria"
+
+def get_lipid_category(total_chol, ldl, hdl, tg):
+    """Get lipid profile assessment"""
+    categories = []
+    if total_chol > 240:
+        categories.append("High Total Cholesterol")
+    if ldl > 160:
+        categories.append("High LDL")
+    if hdl < 40:
+        categories.append("Low HDL")
+    if tg > 200:
+        categories.append("High Triglycerides")
+    
+    if not categories:
+        return "Optimal Lipid Profile"
+    else:
+        return ", ".join(categories)
 
 def determine_model_type(egfr, acr_mg_g):
     """Determine model type based on CKD status"""
@@ -106,6 +137,22 @@ def calculate_dynamic_risk(features, coefficients):
         sex_multiplier = coefficients.risk_factors['male_sex_multiplier']
         risk_multiplier *= sex_multiplier
         active_factors['risk'].append("Male Sex")
+    
+    # Diabetes duration effect
+    diabetes_duration = features.get('diabetes_duration', 5)
+    if diabetes_duration > 10:
+        duration_excess = (diabetes_duration - 10) / 5.0
+        duration_multiplier = coefficients.risk_factors['diabetes_duration_multiplier_per_5_years'] ** duration_excess
+        risk_multiplier *= duration_multiplier
+        if diabetes_duration > 15:
+            active_factors['risk'].append(f"Long Diabetes Duration ({diabetes_duration} years)")
+    
+    # Medication compliance effect
+    medication_compliance = features.get('medication_compliance', 90)
+    if medication_compliance < 80:
+        compliance_multiplier = coefficients.risk_factors['medication_compliance_poor_multiplier']
+        risk_multiplier *= compliance_multiplier
+        active_factors['risk'].append(f"Poor Medication Compliance ({medication_compliance}%)")
     
     # eGFR effect (major driver)
     if egfr < 90:
@@ -154,6 +201,59 @@ def calculate_dynamic_risk(features, coefficients):
         if sbp > 160:
             severe_htn_multiplier = coefficients.risk_factors['severe_hypertension_bonus']
             risk_multiplier *= severe_htn_multiplier
+    
+    # ASCVD Risk effect
+    ascvd_risk = features.get('ascvd_risk_percent', 5)
+    if ascvd_risk > 7.5:
+        ascvd_excess = (ascvd_risk - 7.5) / 10.0
+        ascvd_multiplier = coefficients.risk_factors['ascvd_risk_multiplier_per_10_percent'] ** ascvd_excess
+        risk_multiplier *= ascvd_multiplier
+        
+        if ascvd_risk > 20:
+            high_ascvd_multiplier = coefficients.risk_factors['high_ascvd_risk_bonus']
+            risk_multiplier *= high_ascvd_multiplier
+            active_factors['risk'].append(f"High Cardiovascular Risk (ASCVD {ascvd_risk:.1f}%)")
+        elif ascvd_risk > 10:
+            active_factors['risk'].append(f"Elevated Cardiovascular Risk (ASCVD {ascvd_risk:.1f}%)")
+    
+    # Lipid profile effects
+    total_chol = features.get('total_cholesterol', 180)
+    if total_chol > 200:
+        chol_excess = (total_chol - 200) / 50.0
+        chol_multiplier = coefficients.risk_factors['total_cholesterol_multiplier_per_50mg'] ** chol_excess
+        risk_multiplier *= chol_multiplier
+        
+        if total_chol > 240:
+            active_factors['risk'].append(f"High Total Cholesterol ({total_chol} mg/dl)")
+    
+    ldl = features.get('ldl_cholesterol', 100)
+    if ldl > 100:
+        ldl_excess = (ldl - 100) / 30.0
+        ldl_multiplier = coefficients.risk_factors['ldl_multiplier_per_30mg'] ** ldl_excess
+        risk_multiplier *= ldl_multiplier
+        
+        if ldl > 160:
+            active_factors['risk'].append(f"High LDL Cholesterol ({ldl} mg/dl)")
+    
+    hdl = features.get('hdl_cholesterol', 50)
+    if hdl > 40:
+        hdl_excess = (hdl - 40) / 10.0
+        hdl_protection = coefficients.risk_factors['hdl_protection_per_10mg'] ** hdl_excess
+        risk_multiplier *= hdl_protection
+        
+        if hdl > 60:
+            active_factors['protective'].append(f"High HDL Cholesterol ({hdl} mg/dl)")
+    elif hdl < 40:
+        active_factors['risk'].append(f"Low HDL Cholesterol ({hdl} mg/dl)")
+    
+    triglycerides = features.get('triglycerides', 120)
+    if triglycerides > 150:
+        tg_excess = (triglycerides - 150) / 100.0
+        tg_multiplier = coefficients.risk_factors['triglycerides_multiplier_per_100mg'] ** tg_excess
+        risk_multiplier *= tg_multiplier
+        
+        if triglycerides > 200:
+            active_factors['risk'].append(f"High Triglycerides ({triglycerides} mg/dl)")
     
     # Diabetes complications
     if features.get('retinopathy'):
@@ -273,8 +373,8 @@ def create_risk_factors_chart(active_factors):
     if not all_factors:
         return None
     
-    # Take up to 8 factors
-    display_factors = all_factors[:8]
+    # Take up to 10 factors
+    display_factors = all_factors[:10]
     
     # Create values and colors
     values = []
@@ -337,6 +437,18 @@ def main():
         bmi = st.number_input("BMI (kg/m²)", min_value=15.0, max_value=50.0, value=25.0, step=0.1)
         st.session_state.patient_data['bmi'] = bmi
     
+    # Diabetes Characteristics
+    st.subheader("Diabetes Characteristics")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        diabetes_duration = st.number_input("Diabetes Duration (years)", min_value=0, max_value=60, value=10)
+        st.session_state.patient_data['diabetes_duration'] = diabetes_duration
+        
+    with col2:
+        medication_compliance = st.slider("Overall Medication Compliance (%)", min_value=0, max_value=100, value=85, step=5)
+        st.session_state.patient_data['medication_compliance'] = medication_compliance
+    
     # Laboratory Values
     st.subheader("Laboratory Values")
     col1, col2, col3 = st.columns(3)
@@ -355,6 +467,30 @@ def main():
         hba1c = st.number_input("HbA1c (%)", min_value=5.0, max_value=15.0, value=6.8, step=0.1)
         st.session_state.patient_data['hba1c'] = hba1c
     
+    # Lipid Profile
+    st.subheader("Lipid Profile (mg/dl)")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_cholesterol = st.number_input("Total Cholesterol", min_value=100, max_value=500, value=180)
+        st.session_state.patient_data['total_cholesterol'] = total_cholesterol
+        
+    with col2:
+        ldl_cholesterol = st.number_input("LDL Cholesterol", min_value=30, max_value=300, value=100)
+        st.session_state.patient_data['ldl_cholesterol'] = ldl_cholesterol
+        
+    with col3:
+        hdl_cholesterol = st.number_input("HDL Cholesterol", min_value=20, max_value=100, value=50)
+        st.session_state.patient_data['hdl_cholesterol'] = hdl_cholesterol
+        
+    with col4:
+        triglycerides = st.number_input("Triglycerides", min_value=50, max_value=1000, value=120)
+        st.session_state.patient_data['triglycerides'] = triglycerides
+    
+    # Display lipid assessment
+    lipid_assessment = get_lipid_category(total_cholesterol, ldl_cholesterol, hdl_cholesterol, triglycerides)
+    st.info(f"Lipid Profile Assessment: {lipid_assessment}")
+    
     # Blood Pressure
     st.subheader("Blood Pressure")
     col1, col2, col3 = st.columns(3)
@@ -370,6 +506,36 @@ def main():
     with col3:
         pulse_pressure = sbp - dbp
         st.metric("Pulse Pressure", f"{pulse_pressure} mmHg")
+    
+    # ASCVD Risk Assessment
+    st.subheader("ASCVD-10 Year Risk Assessment")
+    st.markdown("*Use the ACC/AHA Risk Estimator Plus tool to calculate 10-year ASCVD risk and enter the percentage below*")
+    
+    ascvd_risk_percent = st.number_input(
+        "ASCVD 10-Year Risk (%)", 
+        min_value=0.0, 
+        max_value=100.0, 
+        value=5.0, 
+        step=0.1,
+        help="Enter the 10-year ASCVD risk percentage from the ACC/AHA Risk Estimator Plus"
+    )
+    st.session_state.patient_data['ascvd_risk_percent'] = ascvd_risk_percent
+    
+    # Risk categorization
+    if ascvd_risk_percent < 5:
+        ascvd_category = "Low Risk"
+        ascvd_color = "green"
+    elif ascvd_risk_percent < 7.5:
+        ascvd_category = "Borderline Risk"
+        ascvd_color = "yellow"
+    elif ascvd_risk_percent < 20:
+        ascvd_category = "Intermediate Risk"
+        ascvd_color = "orange"
+    else:
+        ascvd_category = "High Risk"
+        ascvd_color = "red"
+    
+    st.markdown(f"**ASCVD Risk Category**: :{ascvd_color}[{ascvd_category}]")
     
     # Diabetes Complications
     st.subheader("Diabetes Complications")
