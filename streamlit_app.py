@@ -738,7 +738,6 @@ def main():
                         
                 # Export functionality
                 st.markdown("---")
-                if st.button("📄 Generate Clinical Report", use_container_width=True):
                     report = f"""
 
 DIABETIC KIDNEY DISEASE RISK ASSESSMENT REPORT
