@@ -1518,6 +1518,11 @@ def main():
                 with col2:
                     # Generate PDF Report with optional patient name
                     if 'risk_results' in st.session_state:
+                        # Optional patient name input
+                        patient_name = st.text_input("Patient Name (Optional for PDF)", 
+                                                    placeholder="Enter patient name or leave blank",
+                                                    key="patient_name_input")
+                        
                         # Generate PDF with proper name handling
                         patient_name_for_pdf = None
                         if patient_name and patient_name.strip():
