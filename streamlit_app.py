@@ -189,8 +189,7 @@ def validate_inputs(data: Dict) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float], 
-                       factors: Dict, recommendations: List[str], ckd_stage: str, 
-                       patient_name: str = None) -> BytesIO:
+                       factors: Dict, recommendations: List[str], ckd_stage: str) -> BytesIO:
     """Generate a professional PDF report similar to KidneyIntelX style"""
     
     buffer = BytesIO()
@@ -268,22 +267,17 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     story.append(metadata_table)
     story.append(Spacer(1, 0.2*inch))
     
-    # Patient Information Section
+    # Patient Information Section - MODIFIED WITHOUT NAME
     story.append(Paragraph("PATIENT INFORMATION", heading_style))
     
     sex_display = "Male" if patient_data.get('sex_male', False) else "Female"
-    # Handle patient name safely
-    if patient_name and patient_name.strip():
-        patient_name_display = str(patient_name).strip()
-    else:
-        patient_name_display = "N/A"
     
     patient_info_data = [
-        ['', 'NAME', 'SEX', 'AGE'],
-        ['', patient_name_display, sex_display, f"{patient_data.get('age', 'N/A')} years"]
+        ['', 'SEX', 'AGE'],
+        ['', sex_display, f"{patient_data.get('age', 'N/A')} years"]
     ]
     
-    patient_table = Table(patient_info_data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 2*inch])
+    patient_table = Table(patient_info_data, colWidths=[0.5*inch, 3*inch, 3.5*inch])
     patient_table.setStyle(TableStyle([
         ('BACKGROUND', (1, 0), (-1, 0), HexColor('#e6f2ff')),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -1516,26 +1510,15 @@ def main():
                         st.rerun()
                 
                 with col2:
-                    # Generate PDF Report with optional patient name
+                    # Generate PDF Report WITHOUT patient name
                     if 'risk_results' in st.session_state:
-                        # Optional patient name input
-                        patient_name = st.text_input("Patient Name (Optional for PDF)", 
-                                                    placeholder="Enter patient name or leave blank",
-                                                    key="patient_name_input")
-                        
-                        # Generate PDF with proper name handling
-                        patient_name_for_pdf = None
-                        if patient_name and patient_name.strip():
-                            patient_name_for_pdf = patient_name.strip()
-                        
                         pdf_buffer = generate_pdf_report(
                             st.session_state.patient_data,
                             st.session_state['risk_results']['risk'],
                             st.session_state['risk_results']['ci'],
                             st.session_state['risk_results']['factors'],
                             st.session_state.get('recommendations', []),
-                            st.session_state['risk_results']['ckd_stage'],
-                            patient_name_for_pdf
+                            st.session_state['risk_results']['ckd_stage']
                         )
                         
                         st.download_button(
