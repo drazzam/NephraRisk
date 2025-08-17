@@ -130,13 +130,14 @@ def calculate_dynamic_risk(features, coefficients):
         age_multiplier = coefficients.risk_factors['age_multiplier_per_10_years'] ** age_decades_over_50
         risk_multiplier *= age_multiplier
         if age > 65:
-            active_factors['risk'].append(f"Advanced Age ({age} years)")
+            active_factors['risk'].append(("Advanced Age", (age_multiplier - 1.0) * 100))
     
-    # Sex effect
+    # Sex effect (only show as factor if there are other risks or elevated overall risk)
+    sex_contribution = 1.0
     if features.get('sex_male'):
         sex_multiplier = coefficients.risk_factors['male_sex_multiplier']
         risk_multiplier *= sex_multiplier
-        active_factors['risk'].append("Male Sex")
+        sex_contribution = sex_multiplier
     
     # Diabetes duration effect
     diabetes_duration = features.get('diabetes_duration', 5)
@@ -145,14 +146,14 @@ def calculate_dynamic_risk(features, coefficients):
         duration_multiplier = coefficients.risk_factors['diabetes_duration_multiplier_per_5_years'] ** duration_excess
         risk_multiplier *= duration_multiplier
         if diabetes_duration > 15:
-            active_factors['risk'].append(f"Long Diabetes Duration ({diabetes_duration} years)")
+            active_factors['risk'].append(("Long Diabetes Duration", (duration_multiplier - 1.0) * 100))
     
     # Medication compliance effect
     medication_compliance = features.get('medication_compliance', 90)
     if medication_compliance < 80:
         compliance_multiplier = coefficients.risk_factors['medication_compliance_poor_multiplier']
         risk_multiplier *= compliance_multiplier
-        active_factors['risk'].append(f"Poor Medication Compliance ({medication_compliance}%)")
+        active_factors['risk'].append(("Poor Medication Compliance", (compliance_multiplier - 1.0) * 100))
     
     # eGFR effect (major driver)
     if egfr < 90:
@@ -162,9 +163,9 @@ def calculate_dynamic_risk(features, coefficients):
         
         if egfr < 60:
             if egfr < 30:
-                active_factors['risk'].append(f"Severely Reduced Kidney Function (eGFR {egfr:.0f})")
+                active_factors['risk'].append(("Severely Reduced Kidney Function", (egfr_multiplier - 1.0) * 100))
             else:
-                active_factors['risk'].append(f"Reduced Kidney Function (eGFR {egfr:.0f})")
+                active_factors['risk'].append(("Reduced Kidney Function", (egfr_multiplier - 1.0) * 100))
     
     # ACR effect (major driver)
     if acr_mg_g > 10:
@@ -174,9 +175,9 @@ def calculate_dynamic_risk(features, coefficients):
         
         if acr_mg_g >= 30:
             if acr_mg_g >= 300:
-                active_factors['risk'].append(f"Severe Proteinuria (ACR {acr_mg_g:.0f} mg/g)")
+                active_factors['risk'].append(("Severe Proteinuria", (acr_multiplier - 1.0) * 100))
             else:
-                active_factors['risk'].append(f"Mild Proteinuria (ACR {acr_mg_g:.0f} mg/g)")
+                active_factors['risk'].append(("Mild Proteinuria", (acr_multiplier - 1.0) * 100))
     
     # HbA1c effect
     hba1c = features.get('hba1c', 7)
@@ -186,35 +187,41 @@ def calculate_dynamic_risk(features, coefficients):
         risk_multiplier *= hba1c_multiplier
         
         if hba1c > 8.5:
-            active_factors['risk'].append(f"Poor Glucose Control (HbA1c {hba1c:.1f}%)")
+            active_factors['risk'].append(("Poor Glucose Control", (hba1c_multiplier - 1.0) * 100))
     
     # Blood pressure effect
     sbp = features.get('sbp', 120)
+    combined_bp_multiplier = 1.0
     if sbp > 120:
         sbp_excess_decades = (sbp - 120) / 10.0
         sbp_multiplier = coefficients.risk_factors['sbp_multiplier_per_10mmhg'] ** sbp_excess_decades
         risk_multiplier *= sbp_multiplier
+        combined_bp_multiplier *= sbp_multiplier
         
-        if sbp > 140:
-            active_factors['risk'].append(f"High Blood Pressure ({sbp} mmHg)")
-            
         if sbp > 160:
             severe_htn_multiplier = coefficients.risk_factors['severe_hypertension_bonus']
             risk_multiplier *= severe_htn_multiplier
+            combined_bp_multiplier *= severe_htn_multiplier
+            
+        if sbp > 140:
+            active_factors['risk'].append(("High Blood Pressure", (combined_bp_multiplier - 1.0) * 100))
     
     # ASCVD Risk effect
     ascvd_risk = features.get('ascvd_risk_percent', 5)
+    combined_ascvd_multiplier = 1.0
     if ascvd_risk > 7.5:
         ascvd_excess = (ascvd_risk - 7.5) / 10.0
         ascvd_multiplier = coefficients.risk_factors['ascvd_risk_multiplier_per_10_percent'] ** ascvd_excess
         risk_multiplier *= ascvd_multiplier
+        combined_ascvd_multiplier *= ascvd_multiplier
         
         if ascvd_risk > 20:
             high_ascvd_multiplier = coefficients.risk_factors['high_ascvd_risk_bonus']
             risk_multiplier *= high_ascvd_multiplier
-            active_factors['risk'].append(f"High Cardiovascular Risk (ASCVD {ascvd_risk:.1f}%)")
+            combined_ascvd_multiplier *= high_ascvd_multiplier
+            active_factors['risk'].append(("High Cardiovascular Risk", (combined_ascvd_multiplier - 1.0) * 100))
         elif ascvd_risk > 10:
-            active_factors['risk'].append(f"Elevated Cardiovascular Risk (ASCVD {ascvd_risk:.1f}%)")
+            active_factors['risk'].append(("Elevated Cardiovascular Risk", (combined_ascvd_multiplier - 1.0) * 100))
     
     # Lipid profile effects
     total_chol = features.get('total_cholesterol', 180)
@@ -224,7 +231,7 @@ def calculate_dynamic_risk(features, coefficients):
         risk_multiplier *= chol_multiplier
         
         if total_chol > 240:
-            active_factors['risk'].append(f"High Total Cholesterol ({total_chol} mg/dl)")
+            active_factors['risk'].append(("High Total Cholesterol", (chol_multiplier - 1.0) * 100))
     
     ldl = features.get('ldl_cholesterol', 100)
     if ldl > 100:
@@ -233,7 +240,7 @@ def calculate_dynamic_risk(features, coefficients):
         risk_multiplier *= ldl_multiplier
         
         if ldl > 160:
-            active_factors['risk'].append(f"High LDL Cholesterol ({ldl} mg/dl)")
+            active_factors['risk'].append(("High LDL Cholesterol", (ldl_multiplier - 1.0) * 100))
     
     hdl = features.get('hdl_cholesterol', 50)
     if hdl > 40:
@@ -242,9 +249,10 @@ def calculate_dynamic_risk(features, coefficients):
         risk_multiplier *= hdl_protection
         
         if hdl > 60:
-            active_factors['protective'].append(f"High HDL Cholesterol ({hdl} mg/dl)")
+            active_factors['protective'].append(("High HDL Cholesterol", (1.0 - hdl_protection) * 100))
     elif hdl < 40:
-        active_factors['risk'].append(f"Low HDL Cholesterol ({hdl} mg/dl)")
+        # Low HDL is a risk factor
+        active_factors['risk'].append(("Low HDL Cholesterol", 8.0))  # Approximate 8% increased risk
     
     triglycerides = features.get('triglycerides', 120)
     if triglycerides > 150:
@@ -253,66 +261,66 @@ def calculate_dynamic_risk(features, coefficients):
         risk_multiplier *= tg_multiplier
         
         if triglycerides > 200:
-            active_factors['risk'].append(f"High Triglycerides ({triglycerides} mg/dl)")
+            active_factors['risk'].append(("High Triglycerides", (tg_multiplier - 1.0) * 100))
     
     # Diabetes complications
     if features.get('retinopathy'):
         severity = features.get('retinopathy_severity', 'mild_npdr')
         if severity in ['severe_npdr', 'pdr']:
             retinopathy_multiplier = coefficients.risk_factors['retinopathy_severe_multiplier']
-            active_factors['risk'].append("Advanced Diabetic Eye Disease")
+            active_factors['risk'].append(("Advanced Diabetic Eye Disease", (retinopathy_multiplier - 1.0) * 100))
         else:
             retinopathy_multiplier = coefficients.risk_factors['retinopathy_mild_multiplier']
-            active_factors['risk'].append("Diabetic Eye Disease")
+            active_factors['risk'].append(("Diabetic Eye Disease", (retinopathy_multiplier - 1.0) * 100))
         
         risk_multiplier *= retinopathy_multiplier
     
     if features.get('neuropathy_dx'):
         neuropathy_multiplier = coefficients.risk_factors['neuropathy_multiplier']
         risk_multiplier *= neuropathy_multiplier
-        active_factors['risk'].append("Diabetic Neuropathy")
+        active_factors['risk'].append(("Diabetic Neuropathy", (neuropathy_multiplier - 1.0) * 100))
     
     if features.get('ascvd_dx'):
         cvd_multiplier = coefficients.risk_factors['cardiovascular_multiplier']
         risk_multiplier *= cvd_multiplier
-        active_factors['risk'].append("Cardiovascular Disease")
+        active_factors['risk'].append(("Cardiovascular Disease", (cvd_multiplier - 1.0) * 100))
     
     # Protective medications
     if features.get('sglt2i_use'):
         sglt2i_protection = coefficients.risk_factors['sglt2i_protection_factor']
         risk_multiplier *= sglt2i_protection
-        active_factors['protective'].append("SGLT2 Inhibitor")
+        active_factors['protective'].append(("SGLT2 Inhibitor", (1.0 - sglt2i_protection) * 100))
     
     if features.get('ace_arb_use'):
         ace_arb_protection = coefficients.risk_factors['ace_arb_protection_factor']
         risk_multiplier *= ace_arb_protection
-        active_factors['protective'].append("ACE Inhibitor/ARB")
+        active_factors['protective'].append(("ACE Inhibitor/ARB", (1.0 - ace_arb_protection) * 100))
     
     if features.get('statin_use'):
         statin_protection = coefficients.risk_factors['statin_protection_factor']
         risk_multiplier *= statin_protection
-        active_factors['protective'].append("Statin Therapy")
+        active_factors['protective'].append(("Statin Therapy", (1.0 - statin_protection) * 100))
     
     # Risk factors
     if features.get('insulin_used'):
         insulin_multiplier = coefficients.risk_factors['insulin_use_multiplier']
         risk_multiplier *= insulin_multiplier
-        active_factors['risk'].append("Insulin Therapy (Advanced Disease)")
+        active_factors['risk'].append(("Insulin Therapy", (insulin_multiplier - 1.0) * 100))
     
     if features.get('smoking_status') == 'current':
         smoking_multiplier = coefficients.risk_factors['current_smoking_multiplier']
         risk_multiplier *= smoking_multiplier
-        active_factors['risk'].append("Current Smoking")
+        active_factors['risk'].append(("Current Smoking", (smoking_multiplier - 1.0) * 100))
     
     if features.get('family_hx_ckd'):
         family_hx_multiplier = coefficients.risk_factors['family_history_multiplier']
         risk_multiplier *= family_hx_multiplier
-        active_factors['risk'].append("Family History of Kidney Disease")
+        active_factors['risk'].append(("Family History of Kidney Disease", (family_hx_multiplier - 1.0) * 100))
     
     if features.get('depression_dx'):
         depression_multiplier = coefficients.risk_factors['depression_multiplier']
         risk_multiplier *= depression_multiplier
-        active_factors['risk'].append("Depression")
+        active_factors['risk'].append(("Depression", (depression_multiplier - 1.0) * 100))
     
     # Calculate final monthly risk
     final_monthly_risk = monthly_risk * risk_multiplier
@@ -324,6 +332,12 @@ def calculate_dynamic_risk(features, coefficients):
     # Calculate 36-month cumulative risk
     survival_probability = (1 - final_monthly_risk) ** 36
     cumulative_risk_36_months = (1 - survival_probability) * 100  # Convert to percentage
+    
+    # Only add male sex as a factor if there are other significant risk factors present
+    # or if overall risk is elevated (>10%)
+    if features.get('sex_male') and sex_contribution > 1.0:
+        if len(active_factors['risk']) > 0 or cumulative_risk_36_months > 10:
+            active_factors['risk'].append(("Male Sex", (sex_contribution - 1.0) * 100))  # Convert to percentage contribution
     
     return cumulative_risk_36_months, active_factors, model_type
 
