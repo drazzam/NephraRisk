@@ -5,3 +5,4 @@ scikit-learn==1.7.1
 joblib==1.5.1
 plotly==6.2.0
 lightgbm==4.6.0
+reportlab
