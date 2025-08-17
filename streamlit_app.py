@@ -109,6 +109,7 @@ class ClinicalValidation:
             'statin': {'hr': 0.88, 'ci': (0.84, 0.92)},
             
             # Complications (Diabetologia 2023) - ENHANCED DETECTION
+            'retinopathy_mild': {'hr': 1.25, 'ci': (1.18, 1.32)},
             'retinopathy_moderate': {'hr': 1.45, 'ci': (1.35, 1.55)},
             'retinopathy_severe': {'hr': 1.82, 'ci': (1.69, 1.96)},
             'neuropathy': {'hr': 1.35, 'ci': (1.27, 1.43)},
@@ -1063,7 +1064,13 @@ def main():
                     ["None", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "PDR"])
                 if retinopathy != "None":
                     st.session_state.patient_data['retinopathy'] = True
-                    severity = "moderate" if "Moderate" in retinopathy else "severe" if "Severe" in retinopathy or "PDR" in retinopathy else "mild"
+                    # Fixed severity mapping
+                    if "Mild" in retinopathy:
+                        severity = "mild"
+                    elif "Moderate" in retinopathy:
+                        severity = "moderate"
+                    else:  # Severe NPDR or PDR
+                        severity = "severe"
                     st.session_state.patient_data['retinopathy_severity'] = severity
                 else:
                     st.session_state.patient_data['retinopathy'] = False
