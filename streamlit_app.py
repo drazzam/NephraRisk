@@ -1612,15 +1612,18 @@ def main():
                                 patient_name_for_pdf
                             )
                             
-                            # Store PDF in session state for download
-                            st.session_state['pdf_buffer'] = pdf_buffer
+                            # Get the bytes value from the buffer
+                            pdf_bytes = pdf_buffer.getvalue()
+                            
+                            # Store PDF bytes in session state for download
+                            st.session_state['pdf_bytes'] = pdf_bytes
                             st.session_state['pdf_generated'] = True
                         
                         # Show download button if PDF was generated
                         if st.session_state.get('pdf_generated', False):
                             st.download_button(
                                 label="📥 Download PDF",
-                                data=st.session_state['pdf_buffer'],
+                                data=st.session_state['pdf_bytes'],
                                 file_name=f"nephrarisk_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                 mime="application/pdf",
                                 use_container_width=True,
