@@ -735,7 +735,11 @@ def main():
                     st.markdown("**Monitoring Schedule:**")
                     for rec in recommendations[len(recommendations)//2:]:
                         st.markdown(rec)
-                
+                        
+                # Export functionality
+                st.markdown("---")
+                if st.button("📄 Generate Clinical Report", use_container_width=True):
+                    report = f"""
 
 DIABETIC KIDNEY DISEASE RISK ASSESSMENT REPORT
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
