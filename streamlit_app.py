@@ -12,7 +12,7 @@ from enum import Enum
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="NephraRisk Pro - Clinical DKD Risk Assessment",
+    page_title="NephraRisk Risk Assessment Tool",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -478,7 +478,7 @@ def create_factors_waterfall(factors: Dict):
 # Main Application
 def main():
     # Header with compliance information
-    st.title("🏥 NephraRisk Pro - Clinical DKD Risk Assessment Tool")
+    st.title("🏥 NephraRisk Risk Assessment Tool")
     
     # Disclaimer
     with st.expander("⚠️ Important Information - Please Read", expanded=False):
