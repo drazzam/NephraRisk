@@ -787,15 +787,6 @@ This report is for clinical decision support only and should not replace clinica
             - **C-statistic:** 0.842 (95% CI: 0.831-0.853)
             - **Calibration Slope:** 0.98 (95% CI: 0.94-1.02)
             - **Brier Score:** 0.089
-            - **Validation Cohort:** 15,432 patients
-            - **Data Sources:** ACCORD, UKPDS, ADVANCE trials
-            
-            ### Key Publications
-            1. KDIGO 2024 Clinical Practice Guideline for CKD
-            2. CREDENCE Trial (NEJM 2019)
-            3. DAPA-CKD Trial (NEJM 2020)
-            4. EMPA-KIDNEY Trial (NEJM 2023)
-            5. FIDELIO-DKD Trial (NEJM 2020)
             """)
         
         with col2:
