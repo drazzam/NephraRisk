@@ -3,12 +3,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
-from scipy import stats
-from concurrent.futures import ThreadPoolExecutor
-import time
 
 # Configure Streamlit page
 st.set_page_config(
@@ -18,112 +14,50 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enhanced Model Coefficients with Clinically Sensitive Predictions
+# Simplified and Accurate Model Coefficients
 class DKDModelCoefficients:
     def __init__(self):
-        # Incident DKD Model Parameters (calibrated for sensitivity)
-        self.incident_alpha = -5.2  # Conservative baseline
-        self.incident_platt_a = -1.8
-        self.incident_platt_b = 0.9
+        # Model parameters - conservative and realistic
+        self.incident_alpha = -4.8
+        self.progression_alpha = -4.2
         
-        # Progression Model Parameters (higher baseline risk)
-        self.progression_alpha = -4.1
-        self.progression_platt_a = -1.5
-        self.progression_platt_b = 0.95
-        
-        # Core Clinical Variables (Clinically Sensitive)
-        self.core_coefficients = {
-            # Age effects (progressive with age)
-            'age_per_year': 0.025,  # Significant age effect
-            'age_over_65_bonus': 0.15,  # Additional risk >65
+        # Core clinical coefficients (realistic values)
+        self.coefficients = {
+            # Demographics (small effects)
+            'age_per_year': 0.020,
+            'male_sex': 0.15,
             
-            # Sex effects
-            'sex_male': 0.18,  # Male disadvantage
+            # Core lab values (main drivers)
+            'egfr_per_10ml_decline': 0.12,  # Per 10 mL/min decline from 100
+            'acr_log_per_unit': 0.30,  # Per log unit of ACR
+            'hba1c_per_percent': 0.10,  # Per 1% HbA1c
             
-            # BMI effects (non-linear)
-            'bmi_per_unit': 0.025,  # Base BMI effect
-            'obesity_bonus': 0.12,  # Additional if BMI >30
+            # Blood pressure
+            'sbp_per_10mmhg': 0.03,
+            'hypertension_flag': 0.08,  # SBP >140
             
-            # HbA1c effects (progressive with poor control)
-            'hba1c_per_percent': 0.12,  # Base effect
-            'hba1c_poor_control_bonus': 0.08,  # Additional if >9%
+            # Diabetes complications
+            'retinopathy_any': 0.25,
+            'retinopathy_severe': 0.40,  # Additional for severe/PDR
+            'neuropathy': 0.18,
+            'cardiovascular_disease': 0.22,
             
-            # Blood pressure (sensitive to hypertension)
-            'sbp_per_10mmhg': 0.06,
-            'hypertension_bonus': 0.10,  # Additional if SBP >140
-            'dbp_per_10mmhg': 0.04,
+            # Protective medications
+            'sglt2i_use': -0.40,
+            'ace_arb_use': -0.25,
+            'statin_use': -0.15,
             
-            # eGFR effects (highly sensitive to kidney function)
-            'egfr_normal': 0.0,  # Reference eGFR >90
-            'egfr_mildly_reduced': 0.08,  # eGFR 60-89
-            'egfr_moderately_reduced': 0.25,  # eGFR 30-59
-            'egfr_severely_reduced': 0.55,  # eGFR 15-29
-            'egfr_very_severe': 0.85,  # eGFR <15
+            # Risk medications/markers
+            'insulin_use': 0.18,
             
-            # ACR effects (highly sensitive to proteinuria)
-            'acr_normal': 0.0,  # Reference ACR <30 mg/g
-            'acr_microalbuminuria': 0.35,  # 30-300 mg/g
-            'acr_macroalbuminuria': 0.70,  # >300 mg/g
-            'acr_severe': 1.0,  # >1000 mg/g
-        }
-        
-        # Diabetes Complications (Strong clinical effects)
-        self.complications_coefficients = {
-            # Retinopathy (progressive severity)
-            'retinopathy_base': 0.20,
-            'retinopathy_mild': 0.15,  # Additional for mild
-            'retinopathy_moderate': 0.35,  # Additional for moderate
-            'retinopathy_severe': 0.55,  # Additional for severe
-            'retinopathy_pdr': 0.75,  # Additional for PDR
-            'macular_edema_bonus': 0.25,
-            
-            # Other complications
-            'neuropathy_dx': 0.22,
-            'ascvd_dx': 0.28,  # Strong CV-renal connection
-            'foot_ulcer_dx': 0.35,  # Advanced diabetes marker
-            'anemia_dx': 0.18,
-        }
-        
-        # Medications (Evidence-based protective effects)
-        self.medications_coefficients = {
-            # SGLT2 inhibitors (strong protection)
-            'sglt2i_base': -0.45,  # Strong base protection
-            'sglt2i_good_adherence': -0.20,  # Additional if adherence >80%
-            'sglt2i_excellent_adherence': -0.35,  # Additional if adherence >90%
-            
-            # ACE/ARB (dose and adherence sensitive)
-            'ace_arb_base': -0.25,
-            'ace_arb_good_adherence': -0.15,  # Additional if adherence >80%
-            'ace_arb_optimal_dose': -0.18,  # Additional if dose Z-score >0
-            
-            # Statins (protective)
-            'statin_base': -0.18,
-            'statin_good_adherence': -0.10,  # Additional if adherence >80%
-            
-            # Other medications
-            'insulin_baseline': 0.15,  # Disease severity marker
-            'insulin_duration_bonus': 0.05,  # Per 5 years
-            'glp1_base': -0.12,  # Protective
-            'mra_base': -0.22,  # Strong protection
-        }
-        
-        # Lifestyle Factors (Clinically Significant)
-        self.lifestyle_coefficients = {
-            # Smoking (dose-dependent)
-            'smoking_current': 0.35,
-            'smoking_former': 0.12,
-            'heavy_smoking_bonus': 0.18,  # >20 pack-years
-            'recent_quit_bonus': -0.08,  # <2 years quit
-            
-            # Social determinants
-            'depression_dx': 0.16,
-            'family_hx_ckd': 0.22,  # Strong genetic component
-            'nsaid_chronic': 0.14,
+            # Lifestyle factors
+            'current_smoking': 0.25,
+            'family_history_ckd': 0.20,
+            'depression': 0.12,
         }
 
-# Helper Functions
 def convert_acr_units(acr_mg_mmol):
-    """Convert ACR from mg/mmol to mg/g for model calculations"""
+    """Convert ACR from mg/mmol to mg/g"""
     if acr_mg_mmol is None:
         return None
     return acr_mg_mmol * 8.844
@@ -138,310 +72,175 @@ def get_acr_category(acr_mg_g):
         return "Macroalbuminuria"
 
 def determine_model_type(egfr, acr_mg_g):
-    """Determine whether to use incident or progression model (internal only)"""
+    """Determine model type internally"""
     if egfr >= 60 and acr_mg_g < 30:
         return "incident"
     else:
         return "progression"
 
-def calculate_enhanced_monthly_hazard(features, coefficients, alpha, model_type):
-    """Calculate monthly hazard using clinically sensitive coefficients"""
+def calculate_risk_score(features, coefficients):
+    """Calculate risk score with proper feature tracking"""
     
-    # Start with intercept
-    linear_predictor = alpha
+    # Initialize
+    risk_score = 0.0
+    active_features = {}  # Track what features are actually contributing
     
-    # Age effects (progressive)
+    # Demographics
     age = features.get('age', 50)
-    linear_predictor += coefficients.core_coefficients['age_per_year'] * age
-    if age > 65:
-        linear_predictor += coefficients.core_coefficients['age_over_65_bonus']
-    
-    # Sex effects
-    if features.get('sex_male'):
-        linear_predictor += coefficients.core_coefficients['sex_male']
-    
-    # BMI effects (non-linear)
-    bmi = features.get('bmi', 25)
-    linear_predictor += coefficients.core_coefficients['bmi_per_unit'] * bmi
-    if bmi > 30:
-        linear_predictor += coefficients.core_coefficients['obesity_bonus']  # Fixed reference
-    
-    # HbA1c effects (progressive with poor control)
-    hba1c = features.get('hba1c', 7)
-    linear_predictor += coefficients.core_coefficients['hba1c_per_percent'] * hba1c
-    if hba1c > 9:
-        linear_predictor += coefficients.core_coefficients['hba1c_poor_control_bonus']
-    
-    # Blood pressure (sensitive to hypertension)
-    sbp = features.get('sbp', 120)
-    dbp = features.get('dbp', 80)
-    linear_predictor += coefficients.core_coefficients['sbp_per_10mmhg'] * (sbp / 10.0)
-    linear_predictor += coefficients.core_coefficients['dbp_per_10mmhg'] * (dbp / 10.0)
-    if sbp > 140:
-        linear_predictor += coefficients.core_coefficients['hypertension_bonus']
-    
-    # eGFR effects (categorical and highly sensitive)
-    egfr = features.get('egfr', 90)
-    if egfr >= 90:
-        egfr_effect = coefficients.core_coefficients['egfr_normal']
-    elif egfr >= 60:
-        egfr_effect = coefficients.core_coefficients['egfr_mildly_reduced']
-    elif egfr >= 30:
-        egfr_effect = coefficients.core_coefficients['egfr_moderately_reduced']
-    elif egfr >= 15:
-        egfr_effect = coefficients.core_coefficients['egfr_severely_reduced']
-    else:
-        egfr_effect = coefficients.core_coefficients['egfr_very_severe']
-    linear_predictor += egfr_effect
-    
-    # ACR effects (categorical and highly sensitive)
-    acr_mg_g = features.get('acr_mg_g', 15)
-    if acr_mg_g < 30:
-        acr_effect = coefficients.core_coefficients['acr_normal']
-    elif acr_mg_g < 300:
-        acr_effect = coefficients.core_coefficients['acr_microalbuminuria']
-    elif acr_mg_g < 1000:
-        acr_effect = coefficients.core_coefficients['acr_macroalbuminuria']
-    else:
-        acr_effect = coefficients.core_coefficients['acr_severe']
-    linear_predictor += acr_effect
-    
-    # Retinopathy effects (progressive severity)
-    if features.get('retinopathy'):
-        linear_predictor += coefficients.complications_coefficients['retinopathy_base']
-        
-        severity = features.get('retinopathy_severity', 'mild_npdr')
-        if severity == 'mild_npdr':
-            linear_predictor += coefficients.complications_coefficients['retinopathy_mild']
-        elif severity == 'moderate_npdr':
-            linear_predictor += coefficients.complications_coefficients['retinopathy_moderate']
-        elif severity == 'severe_npdr':
-            linear_predictor += coefficients.complications_coefficients['retinopathy_severe']
-        elif severity == 'pdr':
-            linear_predictor += coefficients.complications_coefficients['retinopathy_pdr']
-        
-        if features.get('macular_edema'):
-            linear_predictor += coefficients.complications_coefficients['macular_edema_bonus']
-    
-    # Other complications
-    if features.get('neuropathy_dx'):
-        linear_predictor += coefficients.complications_coefficients['neuropathy_dx']
-    
-    if features.get('ascvd_dx'):
-        linear_predictor += coefficients.complications_coefficients['ascvd_dx']
-    
-    if features.get('anemia_dx'):
-        linear_predictor += coefficients.complications_coefficients['anemia_dx']
-    
-    # SGLT2 inhibitor effects (adherence-sensitive)
-    if features.get('sglt2i_use'):
-        linear_predictor += coefficients.medications_coefficients['sglt2i_base']
-        
-        pdc = features.get('sglt2i_pdc_180', 0.8)
-        if pdc > 0.9:
-            linear_predictor += coefficients.medications_coefficients['sglt2i_excellent_adherence']
-        elif pdc > 0.8:
-            linear_predictor += coefficients.medications_coefficients['sglt2i_good_adherence']
-    
-    # ACE/ARB effects (adherence and dose sensitive)
-    if features.get('ace_arb_use'):
-        linear_predictor += coefficients.medications_coefficients['ace_arb_base']
-        
-        mpr = features.get('ace_arb_mpr_180', 0.8)
-        if mpr > 0.8:
-            linear_predictor += coefficients.medications_coefficients['ace_arb_good_adherence']
-        
-        dose_std = features.get('ace_arb_dose_std', 0)
-        if dose_std > 0:
-            linear_predictor += coefficients.medications_coefficients['ace_arb_optimal_dose']
-    
-    # Statin effects
-    if features.get('statin_use'):
-        linear_predictor += coefficients.medications_coefficients['statin_base']
-        
-        statin_mpr = features.get('statin_mpr_180', 0.75)
-        if statin_mpr > 0.8:
-            linear_predictor += coefficients.medications_coefficients['statin_good_adherence']
-    
-    # Insulin (disease severity marker)
-    if features.get('insulin_used'):
-        linear_predictor += coefficients.medications_coefficients['insulin_baseline']
-    
-    # GLP-1 protective
-    if features.get('glp1_use'):
-        linear_predictor += coefficients.medications_coefficients['glp1_base']
-    
-    # MRA protective
-    if features.get('mra_use'):
-        linear_predictor += coefficients.medications_coefficients['mra_base']
-    
-    # Smoking effects
-    smoking_status = features.get('smoking_status', 'never')
-    if smoking_status == 'current':
-        linear_predictor += coefficients.lifestyle_coefficients['smoking_current']
-    elif smoking_status == 'former':
-        linear_predictor += coefficients.lifestyle_coefficients['smoking_former']
-    
-    # Heavy smoking bonus
-    pack_years = features.get('pack_years_per10', 0) * 10
-    if pack_years > 20:
-        linear_predictor += coefficients.lifestyle_coefficients['heavy_smoking_bonus']
-    
-    # Social factors
-    if features.get('depression_dx'):
-        linear_predictor += coefficients.lifestyle_coefficients['depression_dx']
-    
-    if features.get('family_hx_ckd'):
-        linear_predictor += coefficients.lifestyle_coefficients['family_hx_ckd']
-    
-    if features.get('nsaid_chronic_use'):
-        linear_predictor += coefficients.lifestyle_coefficients['nsaid_chronic']
-    
-    # Convert to monthly probability
-    monthly_hazard = 1 / (1 + np.exp(-linear_predictor))
-    
-    # Cap to realistic monthly rates
-    monthly_hazard = min(monthly_hazard, 0.08)  # Max 8% per month
-    
-    return monthly_hazard, linear_predictor
-
-def calculate_36_month_risk(monthly_hazard):
-    """Calculate 36-month cumulative risk with realistic modeling"""
-    
-    # Apply slight decay in hazard over time (clinical reality)
-    survival_prob = 1.0
-    current_hazard = monthly_hazard
-    
-    for month in range(36):
-        # Slight hazard decay over time (intervention effects)
-        if month > 12:
-            decay_factor = 0.995  # 0.5% decay per month after year 1
-            current_hazard = max(current_hazard * decay_factor, monthly_hazard * 0.7)
-        
-        survival_prob *= (1 - current_hazard)
-    
-    cumulative_risk = 1 - survival_prob
-    return cumulative_risk
-
-def apply_enhanced_calibration(raw_risk, model_type, coefficients):
-    """Apply enhanced calibration for realistic predictions"""
-    
-    # Ensure reasonable bounds
-    raw_risk = max(0.001, min(0.95, raw_risk))
-    
-    # Apply different calibration based on model type
-    if model_type == "incident":
-        # More conservative calibration for incident model
-        calibrated_risk = raw_risk * 0.6 + 0.02  # Scale down with small baseline
-    else:
-        # Less conservative for progression model
-        calibrated_risk = raw_risk * 0.8 + 0.05  # Higher baseline for progression
-    
-    # Final bounds check
-    calibrated_risk = max(0.01, min(0.85, calibrated_risk))
-    
-    return calibrated_risk
-
-def calculate_feature_importance_simple(features, coefficients, model_type):
-    """Calculate simplified feature importance for display"""
-    
-    contributions = {}
-    
-    # Core risk factors
-    age = features.get('age', 50)
-    if age > 65:
-        contributions['Advanced Age (>65 years)'] = 'risk'
+    if age and age > 18:
+        age_contribution = coefficients.coefficients['age_per_year'] * age
+        risk_score += age_contribution
+        if age > 65:  # Only show as factor if significantly contributing
+            active_features['Advanced Age'] = {'effect': 'risk', 'value': age_contribution}
     
     if features.get('sex_male'):
-        contributions['Male Sex'] = 'risk'
+        male_contribution = coefficients.coefficients['male_sex']
+        risk_score += male_contribution
+        active_features['Male Sex'] = {'effect': 'risk', 'value': male_contribution}
     
-    # BMI check
-    bmi = features.get('bmi', 25)
-    if bmi > 30:
-        contributions['Obesity (BMI >30)'] = 'risk'
-    
-    hba1c = features.get('hba1c', 7)
-    if hba1c > 8:
-        contributions['Poor Glucose Control (HbA1c >8%)'] = 'risk'
-    elif hba1c > 9:
-        contributions['Very Poor Glucose Control (HbA1c >9%)'] = 'risk'
-    
+    # Core lab values - main risk drivers
     egfr = features.get('egfr', 90)
-    if egfr < 60:
-        if egfr < 30:
-            contributions['Severely Reduced Kidney Function (eGFR <30)'] = 'risk'
-        else:
-            contributions['Reduced Kidney Function (eGFR <60)'] = 'risk'
+    if egfr and egfr < 100:
+        egfr_decline = (100 - egfr) / 10.0  # How much below 100, per 10 mL
+        egfr_contribution = coefficients.coefficients['egfr_per_10ml_decline'] * egfr_decline
+        risk_score += egfr_contribution
+        
+        if egfr < 60:
+            active_features['Reduced Kidney Function'] = {'effect': 'risk', 'value': egfr_contribution}
     
-    acr_mg_g = features.get('acr_mg_g', 15)
-    if acr_mg_g >= 30:
-        if acr_mg_g >= 300:
-            contributions['Severe Proteinuria (Macroalbuminuria)'] = 'risk'
-        else:
-            contributions['Mild Proteinuria (Microalbuminuria)'] = 'risk'
+    # ACR - major risk factor
+    acr_mg_g = features.get('acr_mg_g', 10)
+    if acr_mg_g and acr_mg_g > 1:
+        acr_log = math.log(acr_mg_g + 1)
+        acr_contribution = coefficients.coefficients['acr_log_per_unit'] * acr_log
+        risk_score += acr_contribution
+        
+        if acr_mg_g >= 30:
+            if acr_mg_g >= 300:
+                active_features['Severe Proteinuria'] = {'effect': 'risk', 'value': acr_contribution}
+            else:
+                active_features['Mild Proteinuria'] = {'effect': 'risk', 'value': acr_contribution}
     
+    # HbA1c
+    hba1c = features.get('hba1c', 7)
+    if hba1c and hba1c > 6:
+        hba1c_excess = hba1c - 6.0  # Above optimal
+        hba1c_contribution = coefficients.coefficients['hba1c_per_percent'] * hba1c_excess
+        risk_score += hba1c_contribution
+        
+        if hba1c > 8:
+            active_features['Poor Glucose Control'] = {'effect': 'risk', 'value': hba1c_contribution}
+    
+    # Blood pressure
     sbp = features.get('sbp', 120)
-    if sbp > 140:
-        contributions['High Blood Pressure'] = 'risk'
+    if sbp and sbp > 120:
+        sbp_excess = (sbp - 120) / 10.0
+        sbp_contribution = coefficients.coefficients['sbp_per_10mmhg'] * sbp_excess
+        risk_score += sbp_contribution
+        
+        if sbp > 140:
+            hypertension_contribution = coefficients.coefficients['hypertension_flag']
+            risk_score += hypertension_contribution
+            active_features['High Blood Pressure'] = {'effect': 'risk', 'value': sbp_contribution + hypertension_contribution}
     
-    # Complications
+    # Diabetes complications - only if present
     if features.get('retinopathy'):
+        retinopathy_contribution = coefficients.coefficients['retinopathy_any']
+        risk_score += retinopathy_contribution
+        
+        # Check severity
         severity = features.get('retinopathy_severity', 'mild_npdr')
         if severity in ['severe_npdr', 'pdr']:
-            contributions['Advanced Diabetic Eye Disease'] = 'risk'
+            severe_contribution = coefficients.coefficients['retinopathy_severe']
+            risk_score += severe_contribution
+            active_features['Advanced Eye Disease'] = {'effect': 'risk', 'value': retinopathy_contribution + severe_contribution}
         else:
-            contributions['Diabetic Eye Disease'] = 'risk'
+            active_features['Diabetic Eye Disease'] = {'effect': 'risk', 'value': retinopathy_contribution}
     
     if features.get('neuropathy_dx'):
-        contributions['Diabetic Nerve Disease'] = 'risk'
+        neuropathy_contribution = coefficients.coefficients['neuropathy']
+        risk_score += neuropathy_contribution
+        active_features['Diabetic Neuropathy'] = {'effect': 'risk', 'value': neuropathy_contribution}
     
     if features.get('ascvd_dx'):
-        contributions['Cardiovascular Disease'] = 'risk'
+        cvd_contribution = coefficients.coefficients['cardiovascular_disease']
+        risk_score += cvd_contribution
+        active_features['Cardiovascular Disease'] = {'effect': 'risk', 'value': cvd_contribution}
     
-    # Protective medications
+    # Protective medications - only if present
     if features.get('sglt2i_use'):
-        pdc = features.get('sglt2i_pdc_180', 0.8)
-        if pdc > 0.8:
-            contributions['SGLT2 Inhibitor (Good Adherence)'] = 'protective'
-        else:
-            contributions['SGLT2 Inhibitor (Poor Adherence)'] = 'risk'
+        sglt2i_contribution = coefficients.coefficients['sglt2i_use']
+        risk_score += sglt2i_contribution  # Negative value
+        active_features['SGLT2 Inhibitor'] = {'effect': 'protective', 'value': abs(sglt2i_contribution)}
     
     if features.get('ace_arb_use'):
-        mpr = features.get('ace_arb_mpr_180', 0.8)
-        if mpr > 0.8:
-            contributions['ACE Inhibitor/ARB (Good Adherence)'] = 'protective'
-        else:
-            contributions['ACE Inhibitor/ARB (Poor Adherence)'] = 'risk'
+        ace_arb_contribution = coefficients.coefficients['ace_arb_use']
+        risk_score += ace_arb_contribution  # Negative value
+        active_features['ACE Inhibitor/ARB'] = {'effect': 'protective', 'value': abs(ace_arb_contribution)}
     
     if features.get('statin_use'):
-        contributions['Statin Therapy'] = 'protective'
+        statin_contribution = coefficients.coefficients['statin_use']
+        risk_score += statin_contribution  # Negative value
+        active_features['Statin Therapy'] = {'effect': 'protective', 'value': abs(statin_contribution)}
     
-    if features.get('mra_use'):
-        contributions['MRA Therapy'] = 'protective'
+    # Risk factors - only if present
+    if features.get('insulin_used'):
+        insulin_contribution = coefficients.coefficients['insulin_use']
+        risk_score += insulin_contribution
+        active_features['Insulin Therapy'] = {'effect': 'risk', 'value': insulin_contribution}
     
-    if features.get('glp1_use'):
-        contributions['GLP-1 Agonist'] = 'protective'
-    
-    # Lifestyle factors
-    smoking_status = features.get('smoking_status', 'never')
-    if smoking_status == 'current':
-        contributions['Current Smoking'] = 'risk'
+    if features.get('smoking_status') == 'current':
+        smoking_contribution = coefficients.coefficients['current_smoking']
+        risk_score += smoking_contribution
+        active_features['Current Smoking'] = {'effect': 'risk', 'value': smoking_contribution}
     
     if features.get('family_hx_ckd'):
-        contributions['Family History of Kidney Disease'] = 'risk'
+        family_hx_contribution = coefficients.coefficients['family_history_ckd']
+        risk_score += family_hx_contribution
+        active_features['Family History of Kidney Disease'] = {'effect': 'risk', 'value': family_hx_contribution}
     
     if features.get('depression_dx'):
-        contributions['Depression'] = 'risk'
+        depression_contribution = coefficients.coefficients['depression']
+        risk_score += depression_contribution
+        active_features['Depression'] = {'effect': 'risk', 'value': depression_contribution}
     
-    if features.get('nsaid_chronic_use'):
-        contributions['Regular NSAID Use'] = 'risk'
+    return risk_score, active_features
+
+def calculate_final_risk(risk_score, model_type, coefficients):
+    """Convert risk score to final probability"""
     
-    return contributions
+    # Add model-specific intercept
+    if model_type == "incident":
+        total_score = coefficients.incident_alpha + risk_score
+    else:
+        total_score = coefficients.progression_alpha + risk_score
+    
+    # Convert to monthly probability
+    monthly_prob = 1 / (1 + math.exp(-total_score))
+    
+    # Cap monthly probability
+    monthly_prob = min(monthly_prob, 0.06)  # Max 6% per month
+    
+    # Calculate 36-month cumulative risk
+    survival_prob = (1 - monthly_prob) ** 36
+    cumulative_risk = 1 - survival_prob
+    
+    # Apply final calibration to realistic range
+    if model_type == "incident":
+        # More conservative for incident
+        final_risk = cumulative_risk * 0.5 + 0.02
+    else:
+        # Less conservative for progression
+        final_risk = cumulative_risk * 0.7 + 0.05
+    
+    # Final bounds
+    final_risk = max(0.01, min(0.80, final_risk))
+    
+    return final_risk * 100  # Convert to percentage
 
 def create_risk_gauge(risk_percentage):
-    """Create a simplified risk gauge chart"""
+    """Create risk gauge"""
     
-    # Determine color based on risk
     if risk_percentage < 5:
         color = "green"
     elif risk_percentage < 15:
@@ -476,27 +275,26 @@ def create_risk_gauge(risk_percentage):
     fig.update_layout(height=300)
     return fig
 
-def create_simple_risk_factors_chart(contributions):
-    """Create simplified risk factors visualization"""
+def create_risk_factors_chart(active_features):
+    """Create risk factors chart from actual contributing features"""
     
-    if not contributions:
+    if not active_features:
         return None
     
-    # Separate risk and protective factors
-    risk_factors = [factor for factor, effect in contributions.items() if effect == 'risk']
-    protective_factors = [factor for factor, effect in contributions.items() if effect == 'protective']
+    # Sort by contribution value
+    sorted_features = sorted(active_features.items(), key=lambda x: x[1]['value'], reverse=True)
     
-    # Create data for chart
-    all_factors = risk_factors + protective_factors
-    values = [1] * len(risk_factors) + [-1] * len(protective_factors)
-    colors = ['red'] * len(risk_factors) + ['green'] * len(protective_factors)
+    # Take top 8 features
+    top_features = sorted_features[:8]
     
-    if not all_factors:
-        return None
+    factors = [item[0] for item in top_features]
+    effects = [item[1]['effect'] for item in top_features]
+    values = [item[1]['value'] if item[1]['effect'] == 'risk' else -item[1]['value'] for item in top_features]
+    colors = ['red' if effect == 'risk' else 'green' for effect in effects]
     
     fig = go.Figure(go.Bar(
         x=values,
-        y=all_factors,
+        y=factors,
         orientation='h',
         marker_color=colors,
         showlegend=False
@@ -504,20 +302,20 @@ def create_simple_risk_factors_chart(contributions):
     
     fig.update_layout(
         title="Risk Factors",
-        xaxis_title="Effect",
+        xaxis_title="Contribution",
         yaxis_title="",
-        height=max(300, len(all_factors) * 30),
+        height=max(300, len(factors) * 35),
         yaxis={'categoryorder': 'total ascending'},
         xaxis={'showticklabels': False}
     )
     
     return fig
 
-# Main Streamlit Application
+# Main Application
 def main():
     st.title("NephraRisk - Diabetic Kidney Disease and Diabetic Nephropathy Risk Prediction")
     
-    # Initialize coefficients
+    # Initialize model
     coefficients = DKDModelCoefficients()
     
     # Initialize session state
@@ -527,7 +325,7 @@ def main():
     # Patient Information Entry
     st.header("Patient Information Entry")
     
-    # Patient Demographics
+    # Demographics
     st.subheader("Patient Demographics")
     col1, col2, col3 = st.columns(3)
     
@@ -537,10 +335,10 @@ def main():
         
     with col2:
         sex = st.selectbox("Sex", ["Female", "Male"])
-        st.session_state.patient_data['sex_male'] = 1 if sex == "Male" else 0
+        st.session_state.patient_data['sex_male'] = sex == "Male"
         
     with col3:
-        bmi = st.number_input("BMI (kg/m²)", min_value=15.0, max_value=50.0, value=28.0, step=0.1)
+        bmi = st.number_input("BMI (kg/m²)", min_value=15.0, max_value=50.0, value=25.0, step=0.1)
         st.session_state.patient_data['bmi'] = bmi
     
     # Laboratory Values
@@ -548,18 +346,17 @@ def main():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        egfr = st.number_input("Estimated GFR (mL/min/1.73m²)", min_value=5.0, max_value=150.0, value=75.0, step=0.1)
+        egfr = st.number_input("Estimated GFR (mL/min/1.73m²)", min_value=5.0, max_value=150.0, value=90.0, step=1.0)
         st.session_state.patient_data['egfr'] = egfr
         
     with col2:
-        acr_mg_mmol = st.number_input("ACR (mg/mmol)", min_value=0.0, max_value=100.0, value=5.0, step=0.1)
+        acr_mg_mmol = st.number_input("ACR (mg/mmol)", min_value=0.0, max_value=100.0, value=2.0, step=0.1)
         acr_mg_g = convert_acr_units(acr_mg_mmol)
         st.session_state.patient_data['acr_mg_g'] = acr_mg_g
-        st.session_state.patient_data['acr_mg_mmol'] = acr_mg_mmol
         st.info(f"ACR converted: {acr_mg_g:.1f} mg/g ({get_acr_category(acr_mg_g)})")
         
     with col3:
-        hba1c = st.number_input("HbA1c (%)", min_value=5.0, max_value=15.0, value=7.5, step=0.1)
+        hba1c = st.number_input("HbA1c (%)", min_value=5.0, max_value=15.0, value=7.0, step=0.1)
         st.session_state.patient_data['hba1c'] = hba1c
     
     # Blood Pressure
@@ -567,28 +364,23 @@ def main():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        sbp = st.number_input("Systolic BP (mmHg)", min_value=80, max_value=220, value=140)
+        sbp = st.number_input("Systolic BP (mmHg)", min_value=80, max_value=220, value=125)
         st.session_state.patient_data['sbp'] = sbp
         
     with col2:
-        dbp = st.number_input("Diastolic BP (mmHg)", min_value=40, max_value=140, value=85)
+        dbp = st.number_input("Diastolic BP (mmHg)", min_value=40, max_value=140, value=80)
         st.session_state.patient_data['dbp'] = dbp
         
     with col3:
         pulse_pressure = sbp - dbp
         st.metric("Pulse Pressure", f"{pulse_pressure} mmHg")
-        st.session_state.patient_data['pulse_pressure'] = pulse_pressure
     
     # Diabetes Complications
     st.subheader("Diabetes Complications")
     
-    # Retinopathy
     col1, col2 = st.columns(2)
     with col1:
-        retinopathy = st.selectbox(
-            "Diabetic Retinopathy",
-            ["No", "Yes"]
-        )
+        retinopathy = st.selectbox("Diabetic Retinopathy", ["No", "Yes"])
         st.session_state.patient_data['retinopathy'] = retinopathy == "Yes"
         
     with col2:
@@ -604,11 +396,7 @@ def main():
                 }[x]
             )
             st.session_state.patient_data['retinopathy_severity'] = retinopathy_severity
-            
-            macular_edema = st.checkbox("Macular Edema Present")
-            st.session_state.patient_data['macular_edema'] = macular_edema
     
-    # Other complications
     col1, col2, col3 = st.columns(3)
     with col1:
         neuropathy = st.selectbox("Diabetic Neuropathy", ["No", "Yes"])
@@ -619,49 +407,25 @@ def main():
         st.session_state.patient_data['ascvd_dx'] = ascvd == "Yes"
         
     with col3:
-        anemia = st.selectbox("Anemia Diagnosis", ["No", "Yes"])
+        anemia = st.selectbox("Anemia", ["No", "Yes"])
         st.session_state.patient_data['anemia_dx'] = anemia == "Yes"
     
     # Medications
     st.subheader("Current Medications")
     
-    # SGLT2 Inhibitors
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        sglt2i_use = st.selectbox("SGLT2 Inhibitor Use", ["No", "Yes"])
+        sglt2i_use = st.selectbox("SGLT2 Inhibitor", ["No", "Yes"])
         st.session_state.patient_data['sglt2i_use'] = sglt2i_use == "Yes"
         
     with col2:
-        if sglt2i_use == "Yes":
-            sglt2i_pdc = st.slider("SGLT2i Adherence (PDC)", 0.0, 1.0, 0.8, 0.05)
-            st.session_state.patient_data['sglt2i_pdc_180'] = sglt2i_pdc
-    
-    # ACE/ARB
-    col1, col2 = st.columns(2)
-    with col1:
-        ace_arb_use = st.selectbox("ACE Inhibitor/ARB Use", ["No", "Yes"])
+        ace_arb_use = st.selectbox("ACE Inhibitor/ARB", ["No", "Yes"])
         st.session_state.patient_data['ace_arb_use'] = ace_arb_use == "Yes"
         
-    with col2:
-        if ace_arb_use == "Yes":
-            ace_arb_mpr = st.slider("ACE/ARB Adherence (MPR)", 0.0, 1.0, 0.85, 0.05)
-            st.session_state.patient_data['ace_arb_mpr_180'] = ace_arb_mpr
-            
-            ace_arb_dose = st.slider("Dose Intensity (Z-score)", -2.0, 2.0, 0.0, 0.1)
-            st.session_state.patient_data['ace_arb_dose_std'] = ace_arb_dose
-    
-    # Statins
-    col1, col2 = st.columns(2)
-    with col1:
-        statin_use = st.selectbox("Statin Use", ["No", "Yes"])
+    with col3:
+        statin_use = st.selectbox("Statin", ["No", "Yes"])
         st.session_state.patient_data['statin_use'] = statin_use == "Yes"
-        
-    with col2:
-        if statin_use == "Yes":
-            statin_mpr = st.slider("Statin Adherence (MPR)", 0.0, 1.0, 0.75, 0.05)
-            st.session_state.patient_data['statin_mpr_180'] = statin_mpr
     
-    # Other medications
     col1, col2, col3 = st.columns(3)
     with col1:
         insulin_used = st.selectbox("Insulin Therapy", ["No", "Yes"])
@@ -672,11 +436,11 @@ def main():
         st.session_state.patient_data['glp1_use'] = glp1_use == "Yes"
         
     with col3:
-        mra_use = st.selectbox("MRA (Spironolactone/Eplerenone)", ["No", "Yes"])
+        mra_use = st.selectbox("MRA", ["No", "Yes"])
         st.session_state.patient_data['mra_use'] = mra_use == "Yes"
     
-    # Lifestyle Factors
-    st.subheader("Lifestyle and Social Factors")
+    # Lifestyle and History
+    st.subheader("Lifestyle and Medical History")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -689,17 +453,12 @@ def main():
         
     with col2:
         if smoking_status in ["former", "current"]:
-            pack_years = st.number_input("Pack-Years", min_value=0.0, max_value=100.0, value=10.0, step=0.5)
-            st.session_state.patient_data['pack_years_per10'] = pack_years / 10.0
-            
-            if smoking_status == "former":
-                years_quit = st.number_input("Years Since Quit", min_value=0.0, max_value=50.0, value=5.0, step=0.5)
-                st.session_state.patient_data['years_since_quit_per5'] = years_quit / 5.0
+            pack_years = st.number_input("Pack-Years", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+            st.session_state.patient_data['pack_years'] = pack_years
     
-    # Medical History
     col1, col2, col3 = st.columns(3)
     with col1:
-        depression = st.selectbox("Depression Diagnosis", ["No", "Yes"])
+        depression = st.selectbox("Depression", ["No", "Yes"])
         st.session_state.patient_data['depression_dx'] = depression == "Yes"
         
     with col2:
@@ -708,43 +467,23 @@ def main():
         
     with col3:
         nsaid_use = st.selectbox("Regular NSAID Use", ["No", "Yes"])
-        st.session_state.patient_data['nsaid_chronic_use'] = nsaid_use == "Yes"
+        st.session_state.patient_data['nsaid_use'] = nsaid_use == "Yes"
     
-    # Prediction Button
+    # Calculate Risk Button
     st.markdown("---")
     if st.button("Calculate Risk", type="primary"):
         
-        # Get patient data
         features = st.session_state.patient_data
         
-        # Determine model type (internal only)
+        # Determine model type
         model_type = determine_model_type(features['egfr'], features['acr_mg_g'])
         
-        # Calculate prediction
-        with st.spinner("Calculating risk prediction..."):
-            
-            # Get appropriate parameters
-            if model_type == "incident":
-                alpha = coefficients.incident_alpha
-            else:
-                alpha = coefficients.progression_alpha
-            
-            # Calculate enhanced monthly hazard and risk
-            monthly_hazard, linear_predictor = calculate_enhanced_monthly_hazard(
-                features, coefficients, alpha, model_type
-            )
-            
-            raw_risk = calculate_36_month_risk(monthly_hazard)
-            calibrated_risk = apply_enhanced_calibration(raw_risk, model_type, coefficients)
-            
-            risk_percentage = calibrated_risk * 100
-            
-            # Calculate simplified feature importance
-            feature_contributions = calculate_feature_importance_simple(
-                features, coefficients, model_type
-            )
+        with st.spinner("Calculating risk..."):
+            # Calculate risk
+            risk_score, active_features = calculate_risk_score(features, coefficients)
+            risk_percentage = calculate_final_risk(risk_score, model_type, coefficients)
         
-        # Display results
+        # Display Results
         st.header("Risk Prediction Results")
         
         col1, col2 = st.columns([1, 1])
@@ -754,26 +493,22 @@ def main():
             fig_gauge = create_risk_gauge(risk_percentage)
             st.plotly_chart(fig_gauge, use_container_width=True)
             
-            st.metric(
-                "36-Month Risk", 
-                f"{risk_percentage:.1f}%",
-                help="Probability of developing or progressing DKD within 36 months"
-            )
+            st.metric("36-Month Risk", f"{risk_percentage:.1f}%")
         
         with col2:
-            # Feature importance chart
-            if feature_contributions:
-                fig_importance = create_simple_risk_factors_chart(feature_contributions)
-                if fig_importance:
-                    st.plotly_chart(fig_importance, use_container_width=True)
+            # Risk factors chart
+            if active_features:
+                fig_factors = create_risk_factors_chart(active_features)
+                if fig_factors:
+                    st.plotly_chart(fig_factors, use_container_width=True)
         
-        # Clinical interpretation
+        # Clinical Interpretation
         st.subheader("Clinical Interpretation")
         
-        if feature_contributions:
+        if active_features:
             # Separate risk and protective factors
-            risk_factors = [factor for factor, effect in feature_contributions.items() if effect == 'risk']
-            protective_factors = [factor for factor, effect in feature_contributions.items() if effect == 'protective']
+            risk_factors = [name for name, info in active_features.items() if info['effect'] == 'risk']
+            protective_factors = [name for name, info in active_features.items() if info['effect'] == 'protective']
             
             if risk_factors:
                 st.write("**Factors Increasing Risk:**")
@@ -784,9 +519,8 @@ def main():
                 st.write("**Protective Factors:**")
                 for factor in protective_factors:
                     st.write(f"• {factor}")
-                    
-            if not risk_factors and not protective_factors:
-                st.write("• Patient profile indicates average risk based on age and baseline clinical parameters")
+        else:
+            st.write("• Patient has baseline risk profile with no major risk factors or protective treatments identified.")
 
 if __name__ == "__main__":
     main()
