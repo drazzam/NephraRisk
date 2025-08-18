@@ -477,6 +477,7 @@ def generate_pdf_report(patient_data: Dict, risk: float, ci: Tuple[float, float]
     <font size="8" color="#666666">
     {REGULATORY_STATUS}<br/>
     This report is for clinical decision support only and should not replace clinical judgment.<br/>
+    The NephraRisk predictive modeling system has been developed by Ahmed Y. Azzam, MD, MEng, DSc,(h.c.), FRCP<br/>
     Report generated: {current_time_ast.strftime('%B %d, %Y at %I:%M %p')} AST
     </font>
     </para>
