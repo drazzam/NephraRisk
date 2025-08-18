@@ -1124,6 +1124,7 @@ def main():
     with st.expander("⚠️ Important Information - Please Read", expanded=False):
         st.warning(f"""
         **Regulatory Status:** {REGULATORY_STATUS}
+        **Research and Development:** The NephraRisk predictive modeling system has been developed by Ahmed Y. Azzam, MD, MEng, DSc,(h.c.), FRCP
                 
         **Intended Use:**
         - Clinical decision support for healthcare professionals
